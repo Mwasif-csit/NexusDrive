@@ -34,7 +34,8 @@
         </div>
 
         <nav class="header-nav">
-          <button type="button" class="btn-nav-link" onclick="App.navigate('about')">About &amp; Privacy</button>
+          <a href="about.html" class="btn-nav-link">About</a>
+          <a href="privacy.html" class="btn-nav-link">Privacy</a>
           <button type="button" class="btn btn-outline btn-sm" onclick="App.openAuth('login')">Login</button>
           <button type="button" class="btn btn-hero btn-sm" onclick="App.openAuth('signup')">Get Started</button>
         </nav>
@@ -259,40 +260,51 @@
           <p>Start free and level up your workflow with the fastest Drive uploader experience.</p>
           <div class="cta-btns">
             <button type="button" class="btn btn-hero btn-lg" onclick="App.openAuth('signup')">Get started free →</button>
-            <button type="button" class="btn btn-outline btn-lg" onclick="App.navigate('about')">Privacy &amp; About Us</button>
+            <a href="about.html" class="btn btn-outline btn-lg" style="text-decoration:none;">About ByteNexus</a>
+            <a href="privacy.html" class="btn btn-outline btn-lg" style="text-decoration:none;">Privacy Policy</a>
           </div>
         </div>
       </section>
     </main>
 
-    <!-- Footer -->
+    <!-- Professional Footer -->
     <footer class="site-footer">
-      <div class="container footer-grid">
+      <div class="container footer-grid-pro">
         <div class="footer-brand-col">
-          <div class="brand">
+          <a href="index.html" class="brand" style="text-decoration:none;color:inherit;">
             <div class="brand-icon-box nitro-glow">
               <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
             </div>
             <span class="brand-name">NexusDrive</span>
-          </div>
+          </a>
           <p class="footer-desc">
-            The fastest uploader toolkit for Google Drive by <strong>ByteNexus</strong>. Clone, manage, and batch upload with ridiculous speeds.
+            The fastest uploader &amp; cloud cloner toolkit for Google Drive by <strong>ByteNexus</strong>. 100% browser-based with zero backend file storage.
           </p>
         </div>
 
         <div>
           <h4>Product</h4>
           <ul>
-            <li><button type="button" class="f-link" onclick="App.openAuth('login')">Dashboard</button></li>
-            <li><button type="button" class="f-link" onclick="window.scrollTo({top:0,behavior:'smooth'})">Features</button></li>
+            <li><button type="button" class="f-link" onclick="App.openAuth('login')">Login / Sign Up</button></li>
+            <li><button type="button" class="f-link" onclick="App.openDashboardOrAuth()">Workspace Dashboard</button></li>
+            <li><button type="button" class="f-link" onclick="window.scrollTo({top:0,behavior:'smooth'})">1000× Features</button></li>
           </ul>
         </div>
 
         <div>
-          <h4>Legal &amp; Info</h4>
+          <h4>Legal &amp; Trust</h4>
           <ul>
-            <li><a href="privacy.html" class="f-link" style="text-decoration:none;">Privacy Policy</a></li>
-            <li><button type="button" class="f-link" onclick="App.navigate('about')">About &amp; Zero Data Promise</button></li>
+            <li><a href="about.html" class="f-link">About ByteNexus</a></li>
+            <li><a href="privacy.html" class="f-link">Privacy Policy</a></li>
+            <li><a href="https://myaccount.google.com/permissions" target="_blank" rel="noopener noreferrer" class="f-link">Revoke Google Access</a></li>
+          </ul>
+        </div>
+
+        <div>
+          <h4>Support</h4>
+          <ul>
+            <li><a href="mailto:mwasif.csit@gmail.com" class="f-link">mwasif.csit@gmail.com</a></li>
+            <li><button type="button" class="f-link" onclick="App.navigate('about')">Zero-Data Promise</button></li>
           </ul>
         </div>
       </div>
@@ -406,6 +418,8 @@
 
             <div class="or-sep"><span>or</span></div>
 
+            <div id="auth-inline-alert" class="auth-inline-alert hidden" role="alert"></div>
+
             <form id="auth-form" class="form-stack">
               <div id="auth-name-group" class="field hidden">
                 <label for="auth-name">Full Name</label>
@@ -431,6 +445,11 @@
             <p class="auth-switch">
               <span id="auth-switch-prompt">Don't have an account?</span>
               <button type="button" id="auth-switch-btn" class="text-primary-link" onclick="App.toggleAuthMode()">Sign up</button>
+            </p>
+            <p class="hint-xs" style="text-align:center;margin-top:14px;">
+              By continuing, you agree to NexusDrive's
+              <a href="privacy.html" style="color:var(--primary);text-decoration:none;">Privacy Policy</a> &amp;
+              <a href="about.html" style="color:var(--primary);text-decoration:none;">Zero-Data Terms</a>.
             </p>
           </div>
         </div>
@@ -521,6 +540,14 @@
             <span id="conn-email-label">Drive Connected (Disconnect)</span>
           </button>
         </div>
+      </div>
+
+      <div class="security-note-bar">
+        <span>🔒</span>
+        <span>
+          <strong>Zero-Server Security Active:</strong> Your OAuth token stays AES-GCM encrypted in temporary browser memory and talks directly to Google Drive APIs.
+          <a href="privacy.html" style="color:var(--primary);text-decoration:none;margin-left:4px;">Privacy Policy ↗</a>
+        </span>
       </div>
 
       <!-- Main 3-Tab Glass Card Container -->
@@ -698,7 +725,7 @@
                 <div class="radar-circle-idle" id="upload-result-ico">✓</div>
                 <h4 id="upload-result-title">Ready to go!</h4>
                 <p id="upload-result-desc">Upload files to see results here.</p>
-                <button type="button" id="btn-upload-view-mgr" class="btn btn-hero hidden" onclick="App.switchTab('manage')">View Files in Manage →</button>
+                <button type="button" id="btn-upload-view-mgr" class="btn btn-hero hidden" onclick="App.switchTab('manage', true)">View Files in Manage →</button>
               </div>
             </div>
           </div>
@@ -720,6 +747,10 @@
 
               <div class="mgr-actions-row">
                 <button type="button" class="btn btn-outline btn-sm" onclick="App.refreshManager()">↻ Scan Current Folder</button>
+                <label class="btn btn-outline btn-sm" style="cursor:pointer;">
+                  <input id="manage-select-all" type="checkbox" onchange="App.manageSelectAll(this.checked)" />
+                  <span>Select All</span>
+                </label>
                 <button type="button" id="btn-delete-selected" class="btn btn-danger btn-sm" disabled onclick="App.deleteSelectedManaged()">Delete (<span id="manage-selected-count">0</span>)</button>
               </div>
 
@@ -732,6 +763,7 @@
               </div>
 
               <div class="crumb-strip">
+                <button type="button" id="btn-manage-root" class="btn btn-outline btn-xs hidden" onclick="App.manageGoRoot()" title="Go to My Drive Root">🏠</button>
                 <button type="button" id="btn-manage-back" class="btn btn-outline btn-xs hidden" onclick="App.manageGoBack()">←</button>
                 <span>📁</span>
                 <span id="manage-current-folder-name" class="crumb-title">My Drive</span>
@@ -745,7 +777,10 @@
             <div class="sub-card glass-card manager-col">
               <div class="mgr-preview-head">
                 <h4>Preview Area</h4>
-                <button type="button" id="btn-close-preview" class="btn btn-outline btn-xs hidden" onclick="App.closePreview()">Close Preview</button>
+                <div class="mgr-preview-actions">
+                  <a id="btn-open-drive" href="#" target="_blank" rel="noopener noreferrer" class="btn btn-outline btn-xs hidden" style="text-decoration:none;">Open in Drive ↗</a>
+                  <button type="button" id="btn-close-preview" class="btn btn-outline btn-xs hidden" onclick="App.closePreview()">Close Preview</button>
+                </div>
               </div>
               <div id="manage-preview-area" class="mgr-preview-box">
                 <div class="empty-preview">

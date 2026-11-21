@@ -17,12 +17,15 @@ const App = (() => {
     driveEmail: "",
     accessToken: null,
     scannedRoot: null,
+    scannedSourceId: null,
+    scannedFilterKey: "",
     scanStats: null,
     selectedMap: {},
     injectedFiles: [],
     isCloning: false,
     uploadQueue: [],
     isUploading: false,
+    lastUploadRenderTs: 0,
     manageCurrentFolder: { id: "root", name: "My Drive" },
     manageHistory: [],
     manageItems: [],
@@ -72,6 +75,10 @@ const App = (() => {
         localStorage.removeItem(CURRENT_USER_KEY);
         navigate("landing");
       }
+    } else if (location.hash === "#auth") {
+      openAuth("login");
+    } else if (location.hash === "#about") {
+      navigate("about");
     }
   }
 
@@ -107,14 +114,28 @@ const App = (() => {
   // ===========================================================================
   // PRODUCTION AUTHENTICATION (NO DEMO / NO TEMPORARY LOGINS)
   // ===========================================================================
+  function setAuthInlineError(msg) {
+    const el = document.getElementById("auth-inline-alert");
+    if (!el) return;
+    if (!msg) {
+      el.classList.add("hidden");
+      el.textContent = "";
+    } else {
+      el.classList.remove("hidden");
+      el.textContent = msg;
+    }
+  }
+
   function openAuth(mode) {
     state.authMode = mode || "login";
+    setAuthInlineError("");
     updateAuthUI();
     navigate("auth");
   }
 
   function toggleAuthMode() {
     state.authMode = state.authMode === "login" ? "signup" : "login";
+    setAuthInlineError("");
     updateAuthUI();
   }
 
@@ -138,15 +159,18 @@ const App = (() => {
 
   async function handleAuthSubmit(e) {
     e.preventDefault();
+    setAuthInlineError("");
     const email = document.getElementById("auth-email").value.trim().toLowerCase();
     const password = document.getElementById("auth-password").value;
     const nameInput = document.getElementById("auth-name").value.trim();
 
     if (!email || !email.includes("@")) {
+      setAuthInlineError("Please enter a valid email address.");
       showToast("Invalid Email", "Please enter a valid email address.", "error");
       return;
     }
     if (password.length < 6) {
+      setAuthInlineError("Password must be at least 6 characters.");
       showToast("Password Too Short", "Password must be at least 6 characters.", "error");
       return;
     }
@@ -156,15 +180,18 @@ const App = (() => {
 
     if (state.authMode === "signup") {
       if (accounts[email]) {
+        setAuthInlineError("This email is already registered. Please sign in instead.");
         showToast(
           "Account already exists",
           "This email address is already registered. Please sign in instead.",
           "error"
         );
-        openAuth("login");
+        state.authMode = "login";
+        updateAuthUI();
         return;
       }
       if (!nameInput) {
+        setAuthInlineError("Please enter your full name.");
         showToast("Name Required", "Please enter your full name.", "error");
         return;
       }
@@ -183,11 +210,9 @@ const App = (() => {
     } else {
       const existing = accounts[email];
       if (!existing || existing.passHash !== passHash) {
-        showToast(
-          "Login failed",
-          "Invalid email or password. If you signed up with Google, please use 'Continue with Google'.",
-          "error"
-        );
+        const msg = "Invalid email or password. If you signed up with Google, please click 'Continue with Google'.";
+        setAuthInlineError(msg);
+        showToast("Login failed", msg, "error");
         return;
       }
       state.user = { name: existing.name, email: existing.email };
@@ -407,7 +432,7 @@ const App = (() => {
     showToast("Drive Disconnected", "Google Drive connection removed.");
   }
 
-  function switchTab(tabName) {
+  function switchTab(tabName, resetRoot = false) {
     document.querySelectorAll(".tab-btn").forEach((b) => {
       b.classList.toggle("active", b.dataset.tab === tabName);
     });
@@ -416,6 +441,10 @@ const App = (() => {
     if (panel) panel.classList.add("active");
 
     if (tabName === "manage" && state.driveConnected && state.accessToken) {
+      if (resetRoot) {
+        state.manageCurrentFolder = { id: "root", name: "My Drive" };
+        state.manageHistory = [];
+      }
       refreshManager();
     }
   }
@@ -449,14 +478,21 @@ const App = (() => {
 
     const btn = document.getElementById("btn-scan-link");
     const txt = document.getElementById("scan-btn-text");
+    const radarDesc = document.getElementById("radar-idle-desc");
     btn.disabled = true;
     txt.textContent = "Scanning...";
+    if (radarDesc) radarDesc.textContent = "Scanning source Drive structure...";
 
     try {
       const filters = getFiltersFromUI();
-      const result = await DriveEngine.liveScanTree(rootId, state.accessToken, filters);
+      const filterKey = filters.skipKeywords.join(",") + "|" + filters.exactReplaceNames.join(",");
+      const result = await DriveEngine.liveScanTree(rootId, state.accessToken, filters, (msg) => {
+        if (radarDesc) radarDesc.textContent = msg;
+      });
 
       state.scannedRoot = result.root;
+      state.scannedSourceId = rootId;
+      state.scannedFilterKey = filterKey;
       state.scanStats = result.stats;
       state.selectedMap = {};
       const exactList = filters.exactReplaceNames || [];
@@ -592,12 +628,22 @@ const App = (() => {
     }
 
     const rawLink = document.getElementById("clone-source-link").value.trim();
+    const currentId = DriveEngine.extractDriveId(rawLink);
+    const preFilters = getFiltersFromUI();
+    const currentFilterKey = preFilters.skipKeywords.join(",") + "|" + preFilters.exactReplaceNames.join(",");
+
     if (!rawLink && !state.scannedRoot) {
       showToast("Paste Link", "Enter a Google Drive folder or file link.", "error");
       return;
     }
 
-    if (!state.scannedRoot) {
+    const needsRescan =
+      !state.scannedRoot ||
+      (currentId && currentId !== state.scannedSourceId) ||
+      currentFilterKey !== state.scannedFilterKey;
+
+    if (needsRescan) {
+      state.scannedRoot = null;
       await scanSourceLink();
       if (!state.scannedRoot) return;
     }
@@ -630,7 +676,17 @@ const App = (() => {
         );
         updateCloneProgress("Nexus Transfer Complete!", 1, 1);
         setRadarView("done");
+        document.getElementById("radar-done-desc").textContent = `Cloned "${root.name}" directly into your Google Drive.`;
         refreshQuotaUI();
+        showToast("Nexus Transfer Complete! 🚀", `"${root.name}" saved to your Google Drive.`, "success");
+        return;
+      }
+
+      const hasAnySelected = Object.values(state.selectedMap).some(Boolean) || state.injectedFiles.length > 0;
+      if (!hasAnySelected) {
+        setRadarView("idle");
+        statusBox.classList.add("hidden");
+        showToast("Nothing Selected", "Select at least one file or folder before starting transfer.", "error");
         return;
       }
 
@@ -776,15 +832,15 @@ const App = (() => {
     }));
     state.uploadQueue.push(...items);
     state.isUploading = true;
-    renderUploadQueue();
+    renderUploadQueue(true);
 
     for (const item of items) {
       item.status = "uploading";
-      renderUploadQueue();
+      renderUploadQueue(true);
       try {
         await DriveEngine.liveUploadFileWithProgress(item.file, "root", state.accessToken, (p) => {
           item.pct = p;
-          renderUploadQueue();
+          renderUploadQueue(false);
         });
         item.status = "done";
         item.pct = 100;
@@ -793,7 +849,7 @@ const App = (() => {
         item.err = err.message || "Upload failed";
         if (String(item.err).includes("401")) handleSessionExpired();
       }
-      renderUploadQueue();
+      renderUploadQueue(true);
     }
 
     state.isUploading = false;
@@ -801,7 +857,10 @@ const App = (() => {
     showToast("Upload complete", "Files uploaded directly to your Google Drive.", "success");
   }
 
-  function renderUploadQueue() {
+  function renderUploadQueue(force = true) {
+    const now = Date.now();
+    if (!force && now - state.lastUploadRenderTs < 120) return;
+    state.lastUploadRenderTs = now;
     const list = document.getElementById("upload-queue-list");
     const wrap = document.getElementById("upload-progress-wrap");
     const resTitle = document.getElementById("upload-result-title");
@@ -883,8 +942,12 @@ const App = (() => {
       });
 
       state.manageItems = items;
+      const selectAllEl = document.getElementById("manage-select-all");
+      if (selectAllEl) selectAllEl.checked = false;
       document.getElementById("manage-current-folder-name").textContent = state.manageCurrentFolder.name;
       document.getElementById("btn-manage-back").classList.toggle("hidden", state.manageHistory.length === 0);
+      const rootBtn = document.getElementById("btn-manage-root");
+      if (rootBtn) rootBtn.classList.toggle("hidden", state.manageCurrentFolder.id === "root");
 
       if (!items.length) {
         listEl.innerHTML = `<div class="empty-msg">This folder is empty.</div>`;
@@ -895,7 +958,7 @@ const App = (() => {
         .map((it) => {
           const isFolder = it.mimeType === "application/vnd.google-apps.folder";
           return `<div class="manage-row">
-            <input type="checkbox" onchange="App.toggleManageItem('${Security.escapeHtml(it.id)}', this.checked)" />
+            <input type="checkbox" class="manage-item-cb" data-id="${Security.escapeHtml(it.id)}" onchange="App.toggleManageItem('${Security.escapeHtml(it.id)}', this.checked)" />
             <div class="manage-item-main" onclick="App.onManageItemClick('${Security.escapeHtml(it.id)}')">
               <span>${isFolder ? "📁" : "📄"}</span>
               <div style="min-width:0;flex:1">
@@ -919,6 +982,16 @@ const App = (() => {
     updateManageSelectedCount();
   }
 
+  function manageSelectAll(checked) {
+    state.manageItems.forEach((it) => {
+      state.manageSelected[it.id] = checked;
+    });
+    document.querySelectorAll(".manage-item-cb").forEach((cb) => {
+      cb.checked = checked;
+    });
+    updateManageSelectedCount();
+  }
+
   function updateManageSelectedCount() {
     const cnt = Object.values(state.manageSelected).filter(Boolean).length;
     document.getElementById("manage-selected-count").textContent = cnt;
@@ -938,22 +1011,31 @@ const App = (() => {
 
     const previewBox = document.getElementById("manage-preview-area");
     document.getElementById("btn-close-preview").classList.remove("hidden");
-
-    if (item.webViewLink) {
-      const embedUrl = item.webViewLink.replace(/\/view.*$/, "/preview");
-      previewBox.innerHTML = `<iframe src="${Security.escapeHtml(embedUrl)}" allow="autoplay" allowfullscreen></iframe>`;
-    } else {
-      previewBox.innerHTML = `<div class="empty-preview"><p>${Security.escapeHtml(item.name)}</p></div>`;
+    const openBtn = document.getElementById("btn-open-drive");
+    if (openBtn) {
+      openBtn.href = item.webViewLink || `https://drive.google.com/file/d/${encodeURIComponent(item.id)}/view`;
+      openBtn.classList.remove("hidden");
     }
+
+    const embedUrl = `https://drive.google.com/file/d/${encodeURIComponent(item.id)}/preview`;
+    previewBox.innerHTML = `<iframe src="${Security.escapeHtml(embedUrl)}" allow="autoplay" allowfullscreen></iframe>`;
   }
 
   function closePreview() {
     document.getElementById("btn-close-preview").classList.add("hidden");
+    const openBtn = document.getElementById("btn-open-drive");
+    if (openBtn) openBtn.classList.add("hidden");
     document.getElementById("manage-preview-area").innerHTML = `<div class="empty-preview">
       <div class="preview-eye">👁️</div>
       <h4>Preview Area</h4>
       <p>Click a file to see its preview and play videos here.</p>
     </div>`;
+  }
+
+  function manageGoRoot() {
+    state.manageHistory = [];
+    state.manageCurrentFolder = { id: "root", name: "My Drive" };
+    refreshManager();
   }
 
   function manageGoBack() {
@@ -1017,8 +1099,10 @@ const App = (() => {
     clearUploadQueue,
     refreshManager,
     toggleManageItem,
+    manageSelectAll,
     onManageItemClick,
     closePreview,
+    manageGoRoot,
     manageGoBack,
     createManagerFolder,
     deleteSelectedManaged,

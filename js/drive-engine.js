@@ -13,6 +13,16 @@ const DriveEngine = (() => {
     ).trim();
   }
 
+  function parseApiError(rawText, status) {
+    try {
+      const parsed = JSON.parse(rawText);
+      if (parsed && parsed.error && parsed.error.message) {
+        return `[${status}] ${parsed.error.message}`;
+      }
+    } catch {}
+    return `[${status}] ${String(rawText || "Unknown Google Drive API error").slice(0, 220)}`;
+  }
+
   function extractDriveId(input) {
     if (!input) return null;
     const t = input.trim();
@@ -154,7 +164,10 @@ const DriveEngine = (() => {
     );
     if (!res.ok) {
       const txt = await res.text();
-      throw new Error(`Drive Metadata Error [${res.status}]: ${txt}`);
+      if (res.status === 404) {
+        throw new Error(`Drive Metadata Error [404]: Folder or file not found. Make sure the link is shared as "Anyone with the link".`);
+      }
+      throw new Error(`Drive Metadata Error ${parseApiError(txt, res.status)}`);
     }
     return await res.json();
   }
@@ -180,7 +193,7 @@ const DriveEngine = (() => {
       });
       if (!res.ok) {
         const txt = await res.text();
-        throw new Error(`List Folder Error [${res.status}]: ${txt}`);
+        throw new Error(`List Folder Error ${parseApiError(txt, res.status)}`);
       }
       const data = await res.json();
       if (Array.isArray(data.files)) files.push(...data.files);
@@ -254,7 +267,7 @@ const DriveEngine = (() => {
       headers: { Authorization: "Bearer " + accessToken },
     });
     if (!dlRes.ok) {
-      throw new Error(`Copy Failed [${res.status}]: ${errText}`);
+      throw new Error(`Copy Failed ${parseApiError(errText, res.status)}`);
     }
 
     const blob = await dlRes.blob();
@@ -387,7 +400,9 @@ const DriveEngine = (() => {
 
     async function walk(folderId, folderName) {
       stats.totalFolders += 1;
-      if (onProgress) onProgress(`Scanning: ${stats.totalFiles} files found...`);
+      if (onProgress) {
+        onProgress(`Scanning: ${stats.totalFiles} files • ${stats.totalFolders} folders...`);
+      }
       const children = await withBackoff(() => pool(() => liveListChildren(folderId, accessToken)));
       const subFolders = [];
       const files = [];

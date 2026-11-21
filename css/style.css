@@ -354,13 +354,36 @@ body {
 .cta-btns { display: flex; gap: 12px; margin-top: 24px; flex-wrap: wrap; }
 
 /* Footer */
-.site-footer { border-top: 1px solid var(--border-light); background: rgba(11, 17, 32, 0.55); padding: 48px 0 28px; }
+.site-footer { border-top: 1px solid var(--border-light); background: rgba(11, 17, 32, 0.72); padding: 52px 0 28px; }
 .footer-grid { display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 32px; }
-.footer-desc { max-width: 300px; font-size: 13px; color: var(--muted); margin-top: 14px; }
-.site-footer h4 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 14px; }
+.footer-grid-pro { display: grid; grid-template-columns: 2fr 1fr 1fr 1.2fr; gap: 32px; }
+.footer-desc { max-width: 320px; font-size: 13px; color: var(--muted); margin-top: 14px; line-height: 1.6; }
+.site-footer h4 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 14px; color: #e2e8f0; }
 .site-footer ul { list-style: none; display: flex; flex-direction: column; gap: 10px; }
-.f-link { background: none; border: none; color: var(--muted); font-size: 13px; cursor: pointer; }
+.f-link { background: none; border: none; color: var(--muted); font-size: 13px; cursor: pointer; text-decoration: none; display: inline-block; text-align: left; }
 .f-link:hover { color: var(--primary); }
+.btn-nav-link { text-decoration: none; }
+.auth-inline-alert {
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(239, 68, 68, 0.14);
+  border: 1px solid rgba(239, 68, 68, 0.38);
+  color: #fecaca;
+  font-size: 12px;
+  margin-bottom: 14px;
+}
+.security-note-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: rgba(34, 197, 94, 0.08);
+  border: 1px solid rgba(34, 197, 94, 0.28);
+  color: #bbf7d0;
+  font-size: 12px;
+}
+.mgr-preview-actions { display: flex; align-items: center; gap: 8px; }
 .footer-bottom {
   margin-top: 36px;
   padding-top: 20px;
@@ -665,7 +688,7 @@ input:focus { border-color: var(--primary); }
 .show-xs { display: none; }
 
 @media (max-width: 920px) {
-  .hero-grid, .bento-grid, .steps-3-grid, .footer-grid, .about-cards-grid, .auth-split, .two-col-grid, .mgr-tools-row {
+  .hero-grid, .bento-grid, .steps-3-grid, .footer-grid, .footer-grid-pro, .about-cards-grid, .auth-split, .two-col-grid, .mgr-tools-row {
     grid-template-columns: 1fr;
   }
   .span-3, .span-2 { grid-column: span 1; }

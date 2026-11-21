@@ -19,13 +19,19 @@
             <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
           </div>
           <div class="brand-meta">
-            <span class="brand-name">NexusDrive</span>
+            <div class="brand-title-line">
+              <span class="brand-name">NexusDrive</span>
+              <span class="pro-badge">Pro-grade</span>
+            </div>
             <p class="brand-tagline">by ByteNexus</p>
           </div>
         </a>
 
         <nav class="header-nav">
-          <a href="index.html" class="btn btn-outline btn-sm" style="text-decoration:none;">← Back to Home</a>
+          <a href="index.html" class="btn-nav-link" style="text-decoration:none;">Home</a>
+          <a href="about.html" class="btn-nav-link" style="text-decoration:none;">About</a>
+          <a href="privacy.html" class="btn-nav-link text-primary" style="text-decoration:none;">Privacy</a>
+          <a href="index.html#auth" class="btn btn-hero btn-sm" style="text-decoration:none;">Launch App</a>
         </nav>
       </div>
     </header>
@@ -58,14 +64,14 @@
             When you choose to sign in with Google or connect your Google Drive, NexusDrive uses Google Identity Services OAuth 2.0 to request only the permissions you explicitly approve:
             <br><br>
             • <strong>Basic Profile (<code>openid</code>, <code>email</code>, <code>profile</code>):</strong> Your name, email address, and profile photo to display your active session in the dashboard.<br>
-            • <strong>Google Drive Access (<code>https://www.googleapis.com/auth/drive</code>):</strong> Strictly used to list, copy/clone, upload, rename/organize, preview, or delete files/folders when triggered directly by your actions.
+            • <strong>Google Drive Access (<code>https://www.googleapis.com/auth/drive</code>):</strong> Strictly used to list, copy/clone, upload, create folders, preview, or trash files/folders when triggered directly by your actions.
           </p>
         </div>
 
         <div class="about-card glass-card">
           <h3>2. How Your Data Is Used</h3>
           <p>
-            All API calls travel directly over HTTPS from your browser to Google APIs (<code>www.googleapis.com</code>). Your data is used exclusively to perform the Drive actions you initiate inside the NexusDrive dashboard (such as server-side cloud file copying, direct file uploads, or folder management). We never use your data for advertising, analytics profiling, or AI/ML training.
+            All API calls travel directly over encrypted HTTPS from your browser to Google APIs (<code>www.googleapis.com</code>). Your data is used exclusively to perform the Drive actions you initiate inside the NexusDrive dashboard (such as server-side cloud file copying, direct file uploads, or folder management). We never use your data for advertising, analytics profiling, or AI/ML training.
           </p>
         </div>
 
@@ -106,12 +112,52 @@
     </main>
 
     <footer class="site-footer">
-      <div class="container footer-bottom" style="margin-top:0;border-top:none;padding-top:0;">
+      <div class="container footer-grid-pro">
+        <div class="footer-brand-col">
+          <a href="index.html" class="brand" style="text-decoration:none;color:inherit;">
+            <div class="brand-icon-box nitro-glow">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+            </div>
+            <span class="brand-name">NexusDrive</span>
+          </a>
+          <p class="footer-desc">
+            The fastest uploader &amp; cloud cloner toolkit for Google Drive by <strong>ByteNexus</strong>. 100% browser-based with zero backend file storage.
+          </p>
+        </div>
+
+        <div>
+          <h4>Product</h4>
+          <ul>
+            <li><a href="index.html" class="f-link">Home</a></li>
+            <li><a href="index.html#auth" class="f-link">Login / Sign Up</a></li>
+            <li><a href="index.html#dashboard" class="f-link">Workspace Dashboard</a></li>
+          </ul>
+        </div>
+
+        <div>
+          <h4>Legal &amp; Trust</h4>
+          <ul>
+            <li><a href="about.html" class="f-link">About ByteNexus</a></li>
+            <li><a href="privacy.html" class="f-link">Privacy Policy</a></li>
+            <li><a href="https://myaccount.google.com/permissions" target="_blank" rel="noopener noreferrer" class="f-link">Revoke Google Access</a></li>
+          </ul>
+        </div>
+
+        <div>
+          <h4>Support</h4>
+          <ul>
+            <li><a href="mailto:mwasif.csit@gmail.com" class="f-link">mwasif.csit@gmail.com</a></li>
+            <li><span class="f-link" style="cursor:default;">AES-GCM Client Security</span></li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="container footer-bottom">
         <p>© 2026 <strong>ByteNexus</strong> • NexusDrive. All rights reserved.</p>
         <div class="footer-status">
-          <a href="index.html" class="f-link" style="text-decoration:none;">Home</a>
-          <span>•</span>
-          <a href="privacy.html" class="f-link" style="text-decoration:none;color:var(--primary);">Privacy Policy</a>
+          <span class="dot-green"></span>
+          <span>System Operational</span>
+          <span class="pill-outline">v2.0</span>
         </div>
       </div>
     </footer>
