@@ -723,9 +723,7 @@ const App = (() => {
       );
 
       const exactMatchedParentIds = new Set();
-      const folderPool = DriveEngine.createConcurrencyPool(25);
-      const copyPool = DriveEngine.createConcurrencyPool(35);
-      const copyPromises = [];
+      const pendingCopyBatches = [];
       let done = 0;
       let totalEstimated = Math.max(1, plannedFiles);
       let lastProgTs = 0;
@@ -739,53 +737,57 @@ const App = (() => {
 
       setRadarView("running", "copying");
 
-      async function pipelineTree(node, parentId) {
-        const subFolders = [];
-        for (const ch of node.children || []) {
-          const norm = DriveEngine.normalizeText(ch.name);
-          const isExactReplaced = ch.kind === "file" && exactList.some((ex) => norm.includes(ex));
-          if (isExactReplaced) {
-            exactMatchedParentIds.add(parentId);
-            continue;
-          }
-          if (!state.selectedMap[ch.id]) continue;
-          if (ch.kind === "file") {
-            const srcId = ch.shortcutTargetId || ch.id;
-            const fname = ch.name;
-            const fmime = ch.mimeType;
-            copyPromises.push(
-              copyPool(async () => {
-                try {
-                  await DriveEngine.withBackoff(() =>
-                    DriveEngine.liveCopyFileWithFallback(srcId, fname, parentId, fmime, state.accessToken)
-                  );
-                } catch (err) {
-                  errors.push(`${fname}: ${err.message || err}`);
-                } finally {
-                  done++;
-                  tickProgress(`Nexus Cloning: ${done}/${totalEstimated}`, done === totalEstimated);
-                }
-              })
-            );
-          } else {
-            subFolders.push(ch);
+      // BFS level-by-level batching: 1 HTTP batch creates up to 50 folders AND streams files into 50-file batch copy!
+      let currentLevel = [{ node: root, parentId: createdRoot.id }];
+      while (currentLevel.length > 0) {
+        const levelCopyTasks = [];
+        const levelSubSpecs = [];
+
+        for (const entry of currentLevel) {
+          for (const ch of entry.node.children || []) {
+            const norm = DriveEngine.normalizeText(ch.name);
+            const isExactReplaced = ch.kind === "file" && exactList.some((ex) => norm.includes(ex));
+            if (isExactReplaced) {
+              exactMatchedParentIds.add(entry.parentId);
+              continue;
+            }
+            if (!state.selectedMap[ch.id]) continue;
+            if (ch.kind === "file") {
+              levelCopyTasks.push({
+                sourceId: ch.shortcutTargetId || ch.id,
+                name: ch.name,
+                mimeType: ch.mimeType,
+                parentId: entry.parentId,
+              });
+            } else {
+              levelSubSpecs.push({ name: ch.name, parentId: entry.parentId, node: ch });
+            }
           }
         }
-        if (subFolders.length) {
-          await Promise.all(
-            subFolders.map((sf) =>
-              folderPool(async () => {
-                const created = await DriveEngine.withBackoff(() =>
-                  DriveEngine.liveCreateFolder(sf.name, parentId, state.accessToken)
-                );
-                await pipelineTree(sf, created.id);
-              })
-            )
+
+        if (levelCopyTasks.length > 0) {
+          pendingCopyBatches.push(
+            DriveEngine.liveBatchCopyFiles(levelCopyTasks, state.accessToken, (err, t) => {
+              if (err) errors.push(`${t.name}: ${err.message || err}`);
+              done++;
+              tickProgress(`Nexus Cloning: ${done}/${totalEstimated}`, done === totalEstimated);
+            })
           );
         }
-      }
 
-      await pipelineTree(root, createdRoot.id);
+        if (levelSubSpecs.length > 0) {
+          const createdFolders = await DriveEngine.liveBatchCreateFolders(
+            levelSubSpecs.map((s) => ({ name: s.name, parentId: s.parentId })),
+            state.accessToken
+          );
+          currentLevel = levelSubSpecs.map((s, idx) => ({
+            node: s.node,
+            parentId: createdFolders[idx].id,
+          }));
+        } else {
+          currentLevel = [];
+        }
+      }
 
       const injectTargets = exactMatchedParentIds.size > 0 ? Array.from(exactMatchedParentIds) : [createdRoot.id];
       const injectTasks = [];
@@ -800,7 +802,7 @@ const App = (() => {
 
       const injectPool = DriveEngine.createConcurrencyPool(10);
       await Promise.all([
-        ...copyPromises,
+        ...pendingCopyBatches,
         ...injectTasks.map((inj) =>
           injectPool(async () => {
             try {

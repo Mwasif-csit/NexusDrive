@@ -373,30 +373,245 @@ const DriveEngine = (() => {
     });
   }
 
-  async function liveDeleteFiles(fileIds, accessToken) {
+  /**
+   * Google Drive API v3 HTTP Batch Engine (multipart/mixed, up to 50 sub-requests per HTTP call)
+   * Eliminates per-file CORS OPTIONS preflights so 100+ files scan/copy/delete in seconds.
+   */
+  async function executeDriveBatch(requests, accessToken) {
+    if (!requests.length) return [];
+    const boundary = "nexus_batch_" + Math.random().toString(36).slice(2) + "_" + Date.now();
+    const parts = requests.map((req, idx) => {
+      const lines = [
+        `--${boundary}`,
+        "Content-Type: application/http",
+        `Content-ID: <item-${idx}>`,
+        "",
+        `${req.method} ${req.path} HTTP/1.1`,
+      ];
+      if (req.body !== undefined && req.body !== null) {
+        lines.push("Content-Type: application/json; charset=UTF-8");
+        lines.push("");
+        lines.push(JSON.stringify(req.body));
+      } else {
+        lines.push("");
+      }
+      return lines.join("\r\n");
+    });
+    const payload = parts.join("\r\n") + `\r\n--${boundary}--\r\n`;
+
+    const res = await fetch("https://www.googleapis.com/batch/drive/v3", {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer " + accessToken,
+        "Content-Type": `multipart/mixed; boundary=${boundary}`,
+      },
+      body: payload,
+    });
+    if (!res.ok) {
+      const txt = await res.text();
+      throw new Error(`Batch HTTP ${parseApiError(txt, res.status)}`);
+    }
+
+    const ct = res.headers.get("Content-Type") || "";
+    const bMatch = ct.match(/boundary=([^\s;]+)/i);
+    if (!bMatch) throw new Error("Batch response missing boundary.");
+    const respBoundary = bMatch[1].replace(/^["']|["']$/g, "");
+    const rawText = await res.text();
+
+    const results = new Array(requests.length).fill(null);
+    const chunks = rawText.split(`--${respBoundary}`);
+    for (const chunk of chunks) {
+      const trimmed = chunk.trim();
+      if (!trimmed || trimmed === "--") continue;
+      const outerSplit = trimmed.split(/\r?\n\r?\n/);
+      if (outerSplit.length < 2) continue;
+
+      const idMatch = outerSplit[0].match(/Content-ID:\s*<?(?:response-)?item-(\d+)>?/i);
+      if (!idMatch) continue;
+      const idx = Number(idMatch[1]);
+      if (isNaN(idx) || idx < 0 || idx >= requests.length) continue;
+
+      const innerHttp = outerSplit.slice(1).join("\r\n\r\n");
+      const innerParts = innerHttp.split(/\r?\n\r?\n/);
+      const statusLine = (innerParts[0] || "").split(/\r?\n/)[0] || "";
+      const stMatch = statusLine.match(/HTTP\/[\d.]+\s+(\d+)/i);
+      const status = stMatch ? Number(stMatch[1]) : 500;
+      const bodyStr = innerParts.slice(1).join("\r\n\r\n").trim();
+
+      let parsedBody = null;
+      if (bodyStr) {
+        try {
+          parsedBody = JSON.parse(bodyStr);
+        } catch {
+          parsedBody = { raw: bodyStr };
+        }
+      }
+      results[idx] = { status, body: parsedBody, raw: bodyStr };
+    }
+    return results;
+  }
+
+  function chunkArray(arr, size) {
+    const out = [];
+    for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+    return out;
+  }
+
+  async function liveBatchCreateFolders(specs, accessToken) {
+    if (!specs.length) return [];
+    const results = new Array(specs.length);
+    const chunks = chunkArray(
+      specs.map((s, idx) => ({ ...s, idx })),
+      50
+    );
+    const batchPool = createConcurrencyPool(3);
+    const fallbackPool = createConcurrencyPool(15);
+
     await Promise.all(
-      fileIds.map(async (id) => {
-        const res = await fetch(
-          `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(id)}?supportsAllDrives=true`,
-          {
-            method: "PATCH",
-            headers: {
-              Authorization: "Bearer " + accessToken,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({ trashed: true }),
+      chunks.map((chunk) =>
+        batchPool(async () => {
+          const reqs = chunk.map((s) => {
+            const body = {
+              name: Security.sanitizeName(s.name),
+              mimeType: "application/vnd.google-apps.folder",
+            };
+            if (s.parentId && s.parentId !== "root") body.parents = [s.parentId];
+            return {
+              method: "POST",
+              path: "/drive/v3/files?supportsAllDrives=true&fields=id",
+              body,
+            };
+          });
+
+          let batchRes = null;
+          try {
+            batchRes = await withBackoff(() => executeDriveBatch(reqs, accessToken));
+          } catch {
+            batchRes = null;
           }
-        );
-        if (!res.ok) {
-          const txt = await res.text();
-          throw new Error(`Delete failed [${res.status}]: ${txt}`);
+
+          await Promise.all(
+            chunk.map(async (s, localIdx) => {
+              const r = batchRes && batchRes[localIdx];
+              if (r && r.status >= 200 && r.status < 300 && r.body && r.body.id) {
+                results[s.idx] = r.body;
+              } else {
+                results[s.idx] = await fallbackPool(() =>
+                  withBackoff(() => liveCreateFolder(s.name, s.parentId, accessToken))
+                );
+              }
+            })
+          );
+        })
+      )
+    );
+    return results;
+  }
+
+  async function liveBatchCopyFiles(tasks, accessToken, onItemDone) {
+    if (!tasks.length) return;
+    const chunks = chunkArray(tasks, 50);
+    const batchPool = createConcurrencyPool(3);
+    const retryPool = createConcurrencyPool(20);
+
+    await Promise.all(
+      chunks.map((chunk) =>
+        batchPool(async () => {
+          const reqs = chunk.map((t) => {
+            const body = { name: Security.sanitizeName(t.name) };
+            if (t.parentId && t.parentId !== "root") body.parents = [t.parentId];
+            return {
+              method: "POST",
+              path: `/drive/v3/files/${encodeURIComponent(t.sourceId)}/copy?supportsAllDrives=true&fields=id`,
+              body,
+            };
+          });
+
+          let batchRes = null;
+          try {
+            batchRes = await withBackoff(() => executeDriveBatch(reqs, accessToken));
+          } catch {
+            batchRes = null;
+          }
+
+          const retries = [];
+          chunk.forEach((t, idx) => {
+            const r = batchRes && batchRes[idx];
+            if (r && r.status >= 200 && r.status < 300 && r.body && r.body.id) {
+              if (onItemDone) onItemDone(null, t);
+            } else {
+              retries.push(
+                retryPool(async () => {
+                  try {
+                    await withBackoff(() =>
+                      liveCopyFileWithFallback(t.sourceId, t.name, t.parentId, t.mimeType, accessToken)
+                    );
+                    if (onItemDone) onItemDone(null, t);
+                  } catch (err) {
+                    if (onItemDone) onItemDone(err, t);
+                  }
+                })
+              );
+            }
+          });
+          if (retries.length) await Promise.all(retries);
+        })
+      )
+    );
+  }
+
+  async function liveDeleteFiles(fileIds, accessToken) {
+    if (!fileIds.length) return;
+    const chunks = chunkArray(fileIds, 50);
+    const fallbackPool = createConcurrencyPool(15);
+    await Promise.all(
+      chunks.map(async (chunk) => {
+        const reqs = chunk.map((id) => ({
+          method: "PATCH",
+          path: `/drive/v3/files/${encodeURIComponent(id)}?supportsAllDrives=true`,
+          body: { trashed: true },
+        }));
+        let batchRes = null;
+        try {
+          batchRes = await withBackoff(() => executeDriveBatch(reqs, accessToken));
+        } catch {
+          batchRes = null;
+        }
+        const failedIds = [];
+        chunk.forEach((id, idx) => {
+          const r = batchRes && batchRes[idx];
+          if (!r || r.status < 200 || r.status >= 300) failedIds.push(id);
+        });
+        if (failedIds.length) {
+          await Promise.all(
+            failedIds.map((id) =>
+              fallbackPool(async () => {
+                const res = await fetch(
+                  `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(id)}?supportsAllDrives=true`,
+                  {
+                    method: "PATCH",
+                    headers: {
+                      Authorization: "Bearer " + accessToken,
+                      "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify({ trashed: true }),
+                  }
+                );
+                if (!res.ok) {
+                  const txt = await res.text();
+                  throw new Error(`Delete failed [${res.status}]: ${txt}`);
+                }
+              })
+            )
+          );
         }
       })
     );
   }
 
   async function liveScanTree(rootId, accessToken, filters, onProgress) {
-    const pool = createConcurrencyPool(35);
+    const fallbackPool = createConcurrencyPool(30);
+    const batchPool = createConcurrencyPool(3);
     const stats = { totalFiles: 0, totalFolders: 0, totalBytes: 0, filteredOut: 0 };
     const meta = await withBackoff(() => liveGetMeta(rootId, accessToken));
 
@@ -424,58 +639,110 @@ const DriveEngine = (() => {
       };
     }
 
-    async function walk(folderId, folderName) {
-      stats.totalFolders += 1;
+    const rootNode = {
+      id: effId,
+      name: meta.name,
+      mimeType: "application/vnd.google-apps.folder",
+      kind: "folder",
+      children: [],
+    };
+
+    let currentLevel = [{ id: effId, node: rootNode }];
+
+    while (currentLevel.length > 0) {
+      stats.totalFolders += currentLevel.length;
       if (onProgress) {
         onProgress(`Scanning: ${stats.totalFiles} files • ${stats.totalFolders} folders...`);
       }
-      const children = await withBackoff(() => pool(() => liveListChildren(folderId, accessToken, true)));
-      const subFolders = [];
-      const files = [];
 
-      for (const item of children) {
-        const isShortcut = item.mimeType === "application/vnd.google-apps.shortcut";
-        const tMime = isShortcut && item.shortcutDetails ? item.shortcutDetails.targetMimeType : item.mimeType;
-        const tId = isShortcut && item.shortcutDetails ? item.shortcutDetails.targetId : item.id;
-        const isFolder = tMime === "application/vnd.google-apps.folder";
+      const chunks = chunkArray(currentLevel, 50);
+      const nextLevel = [];
 
-        if (shouldFilterOut(item.name, isFolder ? "folder" : "file", filters)) {
-          stats.filteredOut += 1;
-          continue;
-        }
+      await Promise.all(
+        chunks.map((chunk) =>
+          batchPool(async () => {
+            const reqs = chunk.map((entry) => {
+              const sp = new URLSearchParams({
+                q: `'${entry.id}' in parents and trashed = false`,
+                fields: "nextPageToken,files(id,name,mimeType,size,shortcutDetails(targetId,targetMimeType))",
+                pageSize: "1000",
+                supportsAllDrives: "true",
+                includeItemsFromAllDrives: "true",
+              });
+              return { method: "GET", path: `/drive/v3/files?${sp.toString()}` };
+            });
 
-        if (isFolder) {
-          subFolders.push({ id: tId, name: item.name });
-        } else {
-          const sz = Number(item.size || 0);
-          stats.totalFiles += 1;
-          stats.totalBytes += sz;
-          files.push({
-            id: item.id,
-            name: item.name,
-            mimeType: tMime,
-            kind: "file",
-            size: sz,
-            shortcutTargetId: isShortcut ? tId : null,
-          });
-        }
-      }
+            let batchRes = null;
+            if (accessToken) {
+              try {
+                batchRes = await withBackoff(() => executeDriveBatch(reqs, accessToken));
+              } catch {
+                batchRes = null;
+              }
+            }
 
-      const resolved = await Promise.all(subFolders.map((sf) => walk(sf.id, sf.name)));
-      resolved.sort((a, b) => a.name.localeCompare(b.name));
-      files.sort((a, b) => a.name.localeCompare(b.name));
+            await Promise.all(
+              chunk.map(async (entry, idx) => {
+                const r = batchRes && batchRes[idx];
+                let children;
+                if (r && r.status >= 200 && r.status < 300 && r.body && Array.isArray(r.body.files) && !r.body.nextPageToken) {
+                  children = r.body.files;
+                } else {
+                  children = await withBackoff(() => fallbackPool(() => liveListChildren(entry.id, accessToken, true)));
+                }
 
-      return {
-        id: folderId,
-        name: folderName,
-        mimeType: "application/vnd.google-apps.folder",
-        kind: "folder",
-        children: [...resolved, ...files],
-      };
+                const subNodes = [];
+                const fileNodes = [];
+
+                for (const item of children) {
+                  const isShortcut = item.mimeType === "application/vnd.google-apps.shortcut";
+                  const tMime = isShortcut && item.shortcutDetails ? item.shortcutDetails.targetMimeType : item.mimeType;
+                  const tId = isShortcut && item.shortcutDetails ? item.shortcutDetails.targetId : item.id;
+                  const isFolder = tMime === "application/vnd.google-apps.folder";
+
+                  if (shouldFilterOut(item.name, isFolder ? "folder" : "file", filters)) {
+                    stats.filteredOut += 1;
+                    continue;
+                  }
+
+                  if (isFolder) {
+                    const sfNode = {
+                      id: tId,
+                      name: item.name,
+                      mimeType: "application/vnd.google-apps.folder",
+                      kind: "folder",
+                      children: [],
+                    };
+                    subNodes.push(sfNode);
+                    nextLevel.push({ id: tId, node: sfNode });
+                  } else {
+                    const sz = Number(item.size || 0);
+                    stats.totalFiles += 1;
+                    stats.totalBytes += sz;
+                    fileNodes.push({
+                      id: item.id,
+                      name: item.name,
+                      mimeType: tMime,
+                      kind: "file",
+                      size: sz,
+                      shortcutTargetId: isShortcut ? tId : null,
+                    });
+                  }
+                }
+
+                subNodes.sort((a, b) => a.name.localeCompare(b.name));
+                fileNodes.sort((a, b) => a.name.localeCompare(b.name));
+                entry.node.children = [...subNodes, ...fileNodes];
+              })
+            );
+          })
+        )
+      );
+
+      currentLevel = nextLevel;
     }
 
-    const root = await walk(effId, meta.name);
-    return { root, stats };
+    return { root: rootNode, stats };
   }
 
   return {
@@ -488,6 +755,8 @@ const DriveEngine = (() => {
     liveVerifyToken,
     liveScanTree,
     liveCreateFolder,
+    liveBatchCreateFolders,
+    liveBatchCopyFiles,
     liveCopyFileWithFallback,
     liveUploadFileWithProgress,
     liveListChildren,
