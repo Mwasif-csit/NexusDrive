@@ -104,15 +104,30 @@ const DriveEngine = (() => {
    * - Starts below burst cliffs, ramps up cleanly on 200 streaks, and throttles down smoothly on 403/429
    *   so huge 1,500+ file transfers sustain maximum speed without stop-and-go pauses.
    */
-  function createAdaptivePool({ initial = 18, min = 12, max = 28 } = {}) {
+  function createAdaptivePool({ initial = 18, min = 3, max = 28 } = {}) {
     let limit = Math.max(min, Math.min(max, initial));
     let active = 0;
     let paceMs = 0;
     let cleanStreak = 0;
     let lastThrottleAt = 0;
+    let pauseUntil = 0;
+    let drainTimer = null;
     const queue = [];
 
+    const scheduleDrain = (delay) => {
+      if (drainTimer) return;
+      drainTimer = setTimeout(() => {
+        drainTimer = null;
+        drain();
+      }, delay);
+    };
+
     const drain = () => {
+      const now = Date.now();
+      if (now < pauseUntil) {
+        scheduleDrain(pauseUntil - now + 15);
+        return;
+      }
       while (active < Math.floor(limit) && queue.length > 0) {
         const entry = queue.shift();
         active += 1;
@@ -142,18 +157,18 @@ const DriveEngine = (() => {
       if (cleanStreak >= 3) {
         cleanStreak = 0;
         limit = Math.min(max, limit + 1);
-        paceMs = Math.max(0, paceMs - 10);
+        paceMs = Math.max(0, paceMs - 15);
       }
     };
 
-    enqueue.onThrottle = () => {
+    enqueue.onThrottle = (severe = false) => {
       const now = Date.now();
-      // 1.5s epoch cooldown prevents 20-40 in-flight 403s from collapsing limit straight to min in one wave
       if (now - lastThrottleAt < 1500) return;
       lastThrottleAt = now;
       cleanStreak = 0;
-      limit = Math.max(min, Math.round(limit * 0.85));
-      paceMs = Math.min(60, paceMs + 15);
+      limit = Math.max(min, Math.round(limit * (severe ? 0.65 : 0.85)));
+      paceMs = Math.min(250, paceMs + (severe ? 60 : 20));
+      if (severe) pauseUntil = Math.max(pauseUntil, now + 1200);
     };
 
     return enqueue;
@@ -574,7 +589,7 @@ const DriveEngine = (() => {
    * - Sustained sweet-spot concurrency (18..28 streams × 5-item batches) + 1.5s throttle epoch cooldown
    * - Coalesces failed retry items into a shared retryBuffer so retries fire in full batches instead of 1-item fragments
    */
-  function createStreamingBatchCopier(accessToken, { batchSize = 5, initial = 18, min = 12, max = 28, onItemDone } = {}) {
+  function createStreamingBatchCopier(accessToken, { batchSize = 5, initial = 18, min = 3, max = 28, onItemDone } = {}) {
     const batchPool = createAdaptivePool({ initial, min, max });
     const fallbackPool = createConcurrencyPool(20);
     let buffer = [];
@@ -601,12 +616,14 @@ const DriveEngine = (() => {
       }
 
       const fallbackNeeded = [];
+      let successCount = 0;
       let sawThrottle = batchRes === null;
       let queuedRetry = false;
 
       entries.forEach(({ t, attempt }, idx) => {
         const r = batchRes && batchRes[idx];
         if (r && r.status >= 200 && r.status < 300 && r.body && r.body.id) {
+          successCount += 1;
           if (onItemDone) onItemDone(null, t);
           return;
         }
@@ -621,15 +638,25 @@ const DriveEngine = (() => {
 
         if (status === 403 || status === 429) sawThrottle = true;
 
-        if (isTransient && attempt < 8) {
-          retryBuffer.push({ t, attempt: attempt + 1 });
-          queuedRetry = true;
+        if (isTransient) {
+          if (attempt < 10) {
+            retryBuffer.push({ t, attempt: attempt + 1 });
+            queuedRetry = true;
+          } else {
+            // Never hammer individual /copy endpoints on rate-limit exhaustion
+            if (onItemDone) {
+              onItemDone(
+                new Error(`Google Drive rate limit (${status}) after 10 retries — wait a moment before retrying.`),
+                t
+              );
+            }
+          }
         } else {
           fallbackNeeded.push(t);
         }
       });
 
-      if (sawThrottle) batchPool.onThrottle();
+      if (sawThrottle) batchPool.onThrottle(successCount === 0);
       else batchPool.onSuccess();
 
       // Coalesce retried items across all batches into full batchSize HTTP calls
@@ -707,7 +734,7 @@ const DriveEngine = (() => {
 
   async function liveBatchCopyFiles(tasks, accessToken, onItemDone) {
     if (!tasks.length) return;
-    const copier = createStreamingBatchCopier(accessToken, { batchSize: 5, initial: 18, min: 12, max: 28, onItemDone });
+    const copier = createStreamingBatchCopier(accessToken, { batchSize: 5, initial: 18, min: 3, max: 28, onItemDone });
     copier.push(tasks);
     await copier.flush();
   }

@@ -775,7 +775,7 @@ const App = (() => {
       const copier = DriveEngine.createStreamingBatchCopier(state.accessToken, {
         batchSize: 5,
         initial: 18,
-        min: 12,
+        min: 3,
         max: 28,
         onItemDone: (err, t) => {
           if (err) errors.push(`${t.name}: ${err.message || err}`);
