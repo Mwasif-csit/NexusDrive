@@ -80,7 +80,7 @@ const DriveEngine = (() => {
   }
 
   function createConcurrencyPool(concurrency) {
-    const max = Math.max(1, Math.min(35, concurrency || 20));
+    const max = Math.max(1, Math.min(60, concurrency || 25));
     let active = 0;
     const queue = [];
     const next = () => {
@@ -99,7 +99,7 @@ const DriveEngine = (() => {
       });
   }
 
-  async function withBackoff(op, maxRetries = 7) {
+  async function withBackoff(op, maxRetries = 8) {
     let lastErr;
     for (let i = 0; i < maxRetries; i++) {
       try {
@@ -114,9 +114,9 @@ const DriveEngine = (() => {
           msg.includes("[503]") ||
           msg.includes("[504]") ||
           (msg.includes("[403]") &&
-            /rateLimitExceeded|userRateLimitExceeded|quotaExceeded|usageLimits/i.test(msg));
+            /rateLimitExceeded|userRateLimitExceeded|sharingRateLimitExceeded|quotaExceeded|usageLimits|backendError/i.test(msg));
         if (!retryable || i === maxRetries - 1) throw err;
-        const wait = 150 * Math.pow(2, i) + Math.random() * 120;
+        const wait = 120 * Math.pow(2, i) + Math.random() * 120;
         await new Promise((r) => setTimeout(r, wait));
       }
     }
@@ -184,14 +184,17 @@ const DriveEngine = (() => {
     return await res.json();
   }
 
-  async function liveListChildren(folderId, accessToken) {
+  async function liveListChildren(folderId, accessToken, compact = false) {
     const apiKey = getSiteApiKey();
     const files = [];
     let pageToken = null;
+    const fields = compact
+      ? "nextPageToken,files(id,name,mimeType,size,shortcutDetails(targetId,targetMimeType))"
+      : "nextPageToken,files(id,name,mimeType,size,modifiedTime,webViewLink,shortcutDetails(targetId,targetMimeType))";
     do {
       const sp = new URLSearchParams({
         q: `'${folderId}' in parents and trashed = false`,
-        fields: "nextPageToken,files(id,name,mimeType,size,modifiedTime,webViewLink,shortcutDetails(targetId,targetMimeType))",
+        fields,
         pageSize: "1000",
         supportsAllDrives: "true",
         includeItemsFromAllDrives: "true",
@@ -220,7 +223,7 @@ const DriveEngine = (() => {
       mimeType: "application/vnd.google-apps.folder",
     };
     if (parentId && parentId !== "root") body.parents = [parentId];
-    const res = await fetch("https://www.googleapis.com/drive/v3/files?supportsAllDrives=true", {
+    const res = await fetch("https://www.googleapis.com/drive/v3/files?supportsAllDrives=true&fields=id", {
       method: "POST",
       headers: {
         Authorization: "Bearer " + accessToken,
@@ -251,7 +254,7 @@ const DriveEngine = (() => {
     if (parentId && parentId !== "root") body.parents = [parentId];
 
     const res = await fetch(
-      `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(sourceFileId)}/copy?supportsAllDrives=true`,
+      `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(sourceFileId)}/copy?supportsAllDrives=true&fields=id`,
       {
         method: "POST",
         headers: {
@@ -266,11 +269,22 @@ const DriveEngine = (() => {
     }
 
     const errText = await res.text();
-    if (res.status === 429 || res.status === 401 || res.status >= 500) {
+    const isRateOrServerError =
+      res.status === 429 ||
+      res.status === 401 ||
+      res.status >= 500 ||
+      (res.status === 403 &&
+        /rateLimitExceeded|userRateLimitExceeded|sharingRateLimitExceeded|quotaExceeded|usageLimits|backendError/i.test(errText));
+
+    if (isRateOrServerError) {
       throw new Error(`Copy Failed [${res.status}]: ${errText}`);
     }
 
     const exp = getExportDescriptor(mimeType);
+    const isCopyBlocked = /cannotCopyFile|copyRequiresWriterPermission/i.test(errText);
+    if (!exp && !isCopyBlocked) {
+      throw new Error(`Copy Failed ${parseApiError(errText, res.status)}`);
+    }
     const dlUrl = exp
       ? `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(sourceFileId)}/export?mimeType=${encodeURIComponent(exp.exportMime)}`
       : `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(sourceFileId)}?alt=media&acknowledgeAbuse=true`;
@@ -382,7 +396,7 @@ const DriveEngine = (() => {
   }
 
   async function liveScanTree(rootId, accessToken, filters, onProgress) {
-    const pool = createConcurrencyPool(20);
+    const pool = createConcurrencyPool(35);
     const stats = { totalFiles: 0, totalFolders: 0, totalBytes: 0, filteredOut: 0 };
     const meta = await withBackoff(() => liveGetMeta(rootId, accessToken));
 
@@ -415,7 +429,7 @@ const DriveEngine = (() => {
       if (onProgress) {
         onProgress(`Scanning: ${stats.totalFiles} files • ${stats.totalFolders} folders...`);
       }
-      const children = await withBackoff(() => pool(() => liveListChildren(folderId, accessToken)));
+      const children = await withBackoff(() => pool(() => liveListChildren(folderId, accessToken, true)));
       const subFolders = [];
       const files = [];
 

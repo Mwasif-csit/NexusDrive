@@ -701,18 +701,45 @@ const App = (() => {
         return;
       }
 
+      const t0 = performance.now();
       const customName = document.getElementById("clone-dest-name").value.trim();
       const rootFolderName = customName || root.name;
+
+      // Count planned file copies upfront for instant pipelined progress
+      let plannedFiles = 0;
+      const countSelected = (n) => {
+        for (const ch of n.children || []) {
+          const norm = DriveEngine.normalizeText(ch.name);
+          const isEx = ch.kind === "file" && exactList.some((ex) => norm.includes(ex));
+          if (isEx || !state.selectedMap[ch.id]) continue;
+          if (ch.kind === "file") plannedFiles++;
+          else countSelected(ch);
+        }
+      };
+      countSelected(root);
 
       const createdRoot = await DriveEngine.withBackoff(() =>
         DriveEngine.liveCreateFolder(rootFolderName, "root", state.accessToken)
       );
 
-      const copyTasks = [];
       const exactMatchedParentIds = new Set();
-      const folderPool = DriveEngine.createConcurrencyPool(10);
+      const folderPool = DriveEngine.createConcurrencyPool(25);
+      const copyPool = DriveEngine.createConcurrencyPool(35);
+      const copyPromises = [];
+      let done = 0;
+      let totalEstimated = Math.max(1, plannedFiles);
+      let lastProgTs = 0;
 
-      async function buildTree(node, parentId) {
+      const tickProgress = (label, force = false) => {
+        const now = performance.now();
+        if (!force && now - lastProgTs < 80) return;
+        lastProgTs = now;
+        updateCloneProgress(label, done, totalEstimated);
+      };
+
+      setRadarView("running", "copying");
+
+      async function pipelineTree(node, parentId) {
         const subFolders = [];
         for (const ch of node.children || []) {
           const norm = DriveEngine.normalizeText(ch.name);
@@ -723,29 +750,42 @@ const App = (() => {
           }
           if (!state.selectedMap[ch.id]) continue;
           if (ch.kind === "file") {
-            copyTasks.push({
-              sourceId: ch.shortcutTargetId || ch.id,
-              name: ch.name,
-              mimeType: ch.mimeType,
-              parentId,
-            });
+            const srcId = ch.shortcutTargetId || ch.id;
+            const fname = ch.name;
+            const fmime = ch.mimeType;
+            copyPromises.push(
+              copyPool(async () => {
+                try {
+                  await DriveEngine.withBackoff(() =>
+                    DriveEngine.liveCopyFileWithFallback(srcId, fname, parentId, fmime, state.accessToken)
+                  );
+                } catch (err) {
+                  errors.push(`${fname}: ${err.message || err}`);
+                } finally {
+                  done++;
+                  tickProgress(`Nexus Cloning: ${done}/${totalEstimated}`, done === totalEstimated);
+                }
+              })
+            );
           } else {
             subFolders.push(ch);
           }
         }
-        await Promise.all(
-          subFolders.map((sf) =>
-            folderPool(async () => {
-              const created = await DriveEngine.withBackoff(() =>
-                DriveEngine.liveCreateFolder(sf.name, parentId, state.accessToken)
-              );
-              await buildTree(sf, created.id);
-            })
-          )
-        );
+        if (subFolders.length) {
+          await Promise.all(
+            subFolders.map((sf) =>
+              folderPool(async () => {
+                const created = await DriveEngine.withBackoff(() =>
+                  DriveEngine.liveCreateFolder(sf.name, parentId, state.accessToken)
+                );
+                await pipelineTree(sf, created.id);
+              })
+            )
+          );
+        }
       }
 
-      await buildTree(root, createdRoot.id);
+      await pipelineTree(root, createdRoot.id);
 
       const injectTargets = exactMatchedParentIds.size > 0 ? Array.from(exactMatchedParentIds) : [createdRoot.id];
       const injectTasks = [];
@@ -756,49 +796,32 @@ const App = (() => {
           }
         }
       }
+      totalEstimated = Math.max(1, plannedFiles + injectTasks.length);
 
-      setRadarView("running", "copying");
-      const total = copyTasks.length + injectTasks.length;
-      let done = 0;
-      const copyPool = DriveEngine.createConcurrencyPool(15);
-
-      await Promise.all(
-        copyTasks.map((t) =>
-          copyPool(async () => {
+      const injectPool = DriveEngine.createConcurrencyPool(10);
+      await Promise.all([
+        ...copyPromises,
+        ...injectTasks.map((inj) =>
+          injectPool(async () => {
             try {
               await DriveEngine.withBackoff(() =>
-                DriveEngine.liveCopyFileWithFallback(
-                  t.sourceId,
-                  t.name,
-                  t.parentId,
-                  t.mimeType,
-                  state.accessToken
-                )
+                DriveEngine.liveUploadFileWithProgress(inj.file, inj.parentId, state.accessToken)
               );
             } catch (err) {
-              errors.push(`${t.name}: ${err.message || err}`);
+              errors.push(`${inj.file.name}: ${err.message || err}`);
             } finally {
               done++;
-              updateCloneProgress(`Nexus Cloning: ${done}/${total}`, done, Math.max(1, total));
+              tickProgress(`Injecting Files: ${done}/${totalEstimated}`, done === totalEstimated);
             }
           })
-        )
-      );
+        ),
+      ]);
 
-      for (const inj of injectTasks) {
-        try {
-          await DriveEngine.liveUploadFileWithProgress(inj.file, inj.parentId, state.accessToken);
-        } catch (err) {
-          errors.push(`${inj.file.name}: ${err.message || err}`);
-        } finally {
-          done++;
-          updateCloneProgress(`Injecting Files: ${done}/${total}`, done, Math.max(1, total));
-        }
-      }
-
+      const total = plannedFiles + injectTasks.length;
+      const elapsedSec = ((performance.now() - t0) / 1000).toFixed(1);
       updateCloneProgress("Nexus Transfer Complete!", total, Math.max(1, total));
       setRadarView("done");
-      document.getElementById("radar-done-desc").textContent = `Cloned "${rootFolderName}" (${total} items) into your Drive.`;
+      document.getElementById("radar-done-desc").textContent = `Cloned "${rootFolderName}" (${total} items) in ${elapsedSec}s!`;
       if (errors.length) {
         errBox.classList.remove("hidden");
         errBox.innerHTML = errors.map((e) => `<div>• ${Security.escapeHtml(e)}</div>`).join("");
@@ -806,7 +829,7 @@ const App = (() => {
       state.injectedFiles = [];
       renderInjectTags();
       refreshQuotaUI();
-      showToast("Nexus Transfer Complete! 🚀", `${total} items saved to your Google Drive.`, "success");
+      showToast("Nexus Transfer Complete! 🚀", `${total} items saved to your Google Drive in ${elapsedSec}s.`, "success");
     } catch (err) {
       setRadarView("idle");
       const msg = err.message || String(err);
@@ -845,23 +868,28 @@ const App = (() => {
     state.isUploading = true;
     renderUploadQueue(true);
 
-    for (const item of items) {
-      item.status = "uploading";
-      renderUploadQueue(true);
-      try {
-        await DriveEngine.liveUploadFileWithProgress(item.file, "root", state.accessToken, (p) => {
-          item.pct = p;
-          renderUploadQueue(false);
-        });
-        item.status = "done";
-        item.pct = 100;
-      } catch (err) {
-        item.status = "error";
-        item.err = err.message || "Upload failed";
-        if (String(item.err).includes("401")) handleSessionExpired();
-      }
-      renderUploadQueue(true);
-    }
+    const uploadPool = DriveEngine.createConcurrencyPool(6);
+    await Promise.all(
+      items.map((item) =>
+        uploadPool(async () => {
+          item.status = "uploading";
+          renderUploadQueue(true);
+          try {
+            await DriveEngine.liveUploadFileWithProgress(item.file, "root", state.accessToken, (p) => {
+              item.pct = p;
+              renderUploadQueue(false);
+            });
+            item.status = "done";
+            item.pct = 100;
+          } catch (err) {
+            item.status = "error";
+            item.err = err.message || "Upload failed";
+            if (String(item.err).includes("401")) handleSessionExpired();
+          }
+          renderUploadQueue(true);
+        })
+      )
+    );
 
     state.isUploading = false;
     refreshQuotaUI();
