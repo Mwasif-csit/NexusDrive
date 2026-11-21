@@ -1,20 +1,21 @@
 /**
- * NexusDrive by ByteNexus — Full Pro Application Controller (NitroDrive-Grade Flow)
+ * NexusDrive by ByteNexus — Production Controller (Zero Demo/Temporary Logins)
+ * Exact NitroDrive-Grade Flow:
+ *   1. Real Account Sign-Up / Sign-In OR Official Google Sign-In ("Continue with Google")
+ *   2. Official Google OAuth 2.0 Drive Connection ("Connect Google Drive")
+ *   3. 1000X Direct Google Drive API v3 Cloning, Resumable Upload & File Manager
  */
 const App = (() => {
   const ACCOUNTS_KEY = "nexusdrive_accounts_v1";
   const CURRENT_USER_KEY = "nexusdrive_user_v1";
-  const CLIENT_ID_KEY = "nexusdrive_client_id_v1";
 
   const state = {
     view: "landing",
     authMode: "login",
     user: null,
     driveConnected: false,
-    driveMode: null, // "live" | "sandbox"
     driveEmail: "",
     accessToken: null,
-    clientId: "",
     scannedRoot: null,
     scanStats: null,
     selectedMap: {},
@@ -28,12 +29,14 @@ const App = (() => {
     manageSelected: {},
   };
 
-  async function init() {
-    const cfgClient = (window.NEXUSDRIVE_CONFIG && window.NEXUSDRIVE_CONFIG.GOOGLE_CLIENT_ID) || "";
-    state.clientId = localStorage.getItem(CLIENT_ID_KEY) || cfgClient;
-    const clientEl = document.getElementById("oauth-client-id");
-    if (clientEl && state.clientId) clientEl.value = state.clientId;
+  function getGoogleClientId() {
+    return (
+      (window.NEXUSDRIVE_CONFIG && window.NEXUSDRIVE_CONFIG.GOOGLE_CLIENT_ID) ||
+      ""
+    ).trim();
+  }
 
+  async function init() {
     const form = document.getElementById("auth-form");
     if (form) form.addEventListener("submit", handleAuthSubmit);
 
@@ -53,6 +56,7 @@ const App = (() => {
       });
     }
 
+    // Restore authenticated user & encrypted Google Drive token session
     const savedUser = localStorage.getItem(CURRENT_USER_KEY);
     if (savedUser) {
       try {
@@ -60,16 +64,12 @@ const App = (() => {
         const vault = await Security.loadEncryptedTokenSession();
         if (vault && vault.accessToken) {
           state.driveConnected = true;
-          state.driveMode = "live";
           state.accessToken = vault.accessToken;
           state.driveEmail = vault.email || "Google Drive";
-        } else if (sessionStorage.getItem("nexusdrive_sandbox") === "true") {
-          state.driveConnected = true;
-          state.driveMode = "sandbox";
-          state.driveEmail = "Sandbox Drive (Test Mode)";
         }
         enterDashboard();
       } catch {
+        localStorage.removeItem(CURRENT_USER_KEY);
         navigate("landing");
       }
     }
@@ -101,11 +101,11 @@ const App = (() => {
       desc ? `<div class="toast-desc">${Security.escapeHtml(desc)}</div>` : ""
     }`;
     box.appendChild(el);
-    setTimeout(() => el.remove(), 4200);
+    setTimeout(() => el.remove(), 4500);
   }
 
   // ===========================================================================
-  // AUTHENTICATION
+  // PRODUCTION AUTHENTICATION (NO DEMO / NO TEMPORARY LOGINS)
   // ===========================================================================
   function openAuth(mode) {
     state.authMode = mode || "login";
@@ -142,8 +142,12 @@ const App = (() => {
     const password = document.getElementById("auth-password").value;
     const nameInput = document.getElementById("auth-name").value.trim();
 
-    if (password.length < 4) {
-      showToast("Weak Password", "Use at least 4 characters.", "error");
+    if (!email || !email.includes("@")) {
+      showToast("Invalid Email", "Please enter a valid email address.", "error");
+      return;
+    }
+    if (password.length < 6) {
+      showToast("Password Too Short", "Password must be at least 6 characters.", "error");
       return;
     }
 
@@ -152,59 +156,114 @@ const App = (() => {
 
     if (state.authMode === "signup") {
       if (accounts[email]) {
-        showToast("Account Exists", "This email is already registered. Please sign in.", "error");
+        showToast(
+          "Account already exists",
+          "This email address is already registered. Please sign in instead.",
+          "error"
+        );
         openAuth("login");
         return;
       }
+      if (!nameInput) {
+        showToast("Name Required", "Please enter your full name.", "error");
+        return;
+      }
       const userObj = {
-        name: Security.sanitizeName(nameInput || email.split("@")[0]),
+        name: Security.sanitizeName(nameInput),
         email,
         passHash,
+        provider: "email",
       };
       accounts[email] = userObj;
       localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(accounts));
       state.user = { name: userObj.name, email: userObj.email };
+      localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(state.user));
+      enterDashboard();
+      showToast("Account created!", "Now connect your Google Drive to get started.", "success");
     } else {
       const existing = accounts[email];
-      if (existing && existing.passHash !== passHash) {
-        showToast("Invalid Credentials", "Incorrect password.", "error");
+      if (!existing || existing.passHash !== passHash) {
+        showToast(
+          "Login failed",
+          "Invalid email or password. If you signed up with Google, please use 'Continue with Google'.",
+          "error"
+        );
         return;
       }
-      const resolvedName = existing ? existing.name : email.split("@")[0];
-      if (!existing) {
-        accounts[email] = { name: resolvedName, email, passHash };
-        localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(accounts));
-      }
-      state.user = { name: resolvedName, email };
+      state.user = { name: existing.name, email: existing.email };
+      localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(state.user));
+      enterDashboard();
+      showToast("Welcome back!", `Signed in as ${existing.email}`, "success");
     }
-
-    localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(state.user));
-    enterDashboard();
-    showToast("Welcome!", "Now click 'Connect Google Drive' to link your Drive.", "success");
   }
 
-  function quickDemoAccountLogin() {
-    state.user = { name: "ByteNexus User", email: "user@bytenexus.site" };
-    localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(state.user));
-    enterDashboard();
-    showToast("Signed In", "Connect your Google Drive to begin.", "success");
+  /**
+   * Real Google OAuth Sign-In ("Continue with Google")
+   */
+  function loginWithGoogle() {
+    const clientId = getGoogleClientId();
+    if (!clientId) {
+      showToast("Configuration Missing", "Google Client ID is not set in js/config.js.", "error");
+      return;
+    }
+    if (!window.google || !window.google.accounts || !window.google.accounts.oauth2) {
+      showToast("Google Auth Loading", "Google Sign-In SDK is loading. Please try again in a second.", "error");
+      return;
+    }
+
+    const btn = document.getElementById("btn-google-login");
+    btn.disabled = true;
+
+    try {
+      const client = window.google.accounts.oauth2.initTokenClient({
+        client_id: clientId,
+        scope: "openid email profile",
+        callback: async (resp) => {
+          btn.disabled = false;
+          if (resp.error || !resp.access_token) {
+            handleOAuthError(resp.error || "Google sign-in was cancelled.");
+            return;
+          }
+          try {
+            const profile = await DriveEngine.fetchGoogleUserProfile(resp.access_token);
+            state.user = {
+              name: Security.sanitizeName(profile.name || profile.email.split("@")[0]),
+              email: profile.email,
+            };
+            localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(state.user));
+            enterDashboard();
+            showToast("Welcome!", `Signed in with Google as ${profile.email}`, "success");
+          } catch (err) {
+            showToast("Profile Error", err.message || "Could not load Google profile.", "error");
+          }
+        },
+      });
+      client.requestAccessToken({ prompt: "select_account" });
+    } catch (err) {
+      btn.disabled = false;
+      showToast("Google Login Failed", err.message || "OAuth initialization failed.", "error");
+    }
   }
 
   function logout() {
+    if (state.accessToken) {
+      fetch("https://oauth2.googleapis.com/revoke?token=" + encodeURIComponent(state.accessToken), {
+        method: "POST",
+      }).catch(() => {});
+    }
     localStorage.removeItem(CURRENT_USER_KEY);
     Security.clearTokenSession();
-    sessionStorage.removeItem("nexusdrive_sandbox");
     state.user = null;
     state.driveConnected = false;
-    state.driveMode = null;
     state.accessToken = null;
     state.driveEmail = "";
+    state.scannedRoot = null;
     navigate("landing");
-    showToast("Logged Out", "Session cleared safely.");
+    showToast("Logged Out", "You have been signed out safely.");
   }
 
   // ===========================================================================
-  // DASHBOARD & DRIVE CONNECTION
+  // DASHBOARD & REAL GOOGLE DRIVE OAUTH CONNECTION
   // ===========================================================================
   function enterDashboard() {
     navigate("dashboard");
@@ -214,15 +273,13 @@ const App = (() => {
 
   function updateConnectionUI() {
     const btnConn = document.getElementById("btn-connect-drive");
-    const btnDemo = document.getElementById("btn-demo-drive");
     const btnDisc = document.getElementById("btn-disconnect-drive");
     const quotaPill = document.getElementById("quota-pill");
     const upPill = document.getElementById("upload-conn-pill");
     const emailLbl = document.getElementById("conn-email-label");
 
-    if (state.driveConnected) {
+    if (state.driveConnected && state.accessToken) {
       btnConn.classList.add("hidden");
-      if (btnDemo) btnDemo.classList.add("hidden");
       btnDisc.classList.remove("hidden");
       emailLbl.textContent = `Drive Connected (${state.driveEmail})`;
       quotaPill.classList.remove("hidden");
@@ -234,7 +291,6 @@ const App = (() => {
       refreshQuotaUI();
     } else {
       btnConn.classList.remove("hidden");
-      if (btnDemo) btnDemo.classList.remove("hidden");
       btnDisc.classList.add("hidden");
       quotaPill.classList.add("hidden");
       if (upPill) {
@@ -246,127 +302,95 @@ const App = (() => {
   }
 
   async function refreshQuotaUI() {
+    if (!state.accessToken) return;
     try {
-      let quota = null;
-      if (state.driveMode === "live" && state.accessToken) {
-        const about = await DriveEngine.liveVerifyToken(state.accessToken);
-        if (about.storageQuota) {
-          quota = {
-            limit: Number(about.storageQuota.limit || 0),
-            usage: Number(about.storageQuota.usage || 0),
-          };
-        }
-      } else if (state.driveMode === "sandbox") {
-        quota = await DriveEngine.sbGetQuota();
-      }
-      if (quota && quota.limit > 0) {
+      const about = await DriveEngine.liveVerifyToken(state.accessToken);
+      if (about.storageQuota && Number(about.storageQuota.limit) > 0) {
         document.getElementById("quota-text").textContent = `${DriveEngine.formatBytes(
-          quota.usage
-        )} / ${DriveEngine.formatBytes(quota.limit)}`;
+          Number(about.storageQuota.usage || 0)
+        )} / ${DriveEngine.formatBytes(Number(about.storageQuota.limit))}`;
       }
-    } catch {
-      // ignore
+    } catch (err) {
+      if (String(err.message).includes("401")) {
+        handleSessionExpired();
+      }
     }
   }
 
-  function openConnectModal() {
-    const preId = (window.NEXUSDRIVE_CONFIG && window.NEXUSDRIVE_CONFIG.GOOGLE_CLIENT_ID) || "";
-    if (preId && window.google && window.google.accounts && window.google.accounts.oauth2) {
-      state.clientId = preId;
-      document.getElementById("oauth-client-id").value = preId;
-      connectWithGoogleOAuth();
+  function connectGoogleDrive() {
+    const clientId = getGoogleClientId();
+    if (!clientId) {
+      showToast("Client ID Missing", "Google Client ID must be set in js/config.js.", "error");
       return;
     }
-    document.getElementById("modal-error-box").classList.add("hidden");
-    document.getElementById("connect-modal").classList.remove("hidden");
-  }
-
-  function closeConnectModal() {
-    document.getElementById("connect-modal").classList.add("hidden");
-  }
-
-  function showModalError(msg) {
-    const box = document.getElementById("modal-error-box");
-    box.textContent = msg;
-    box.classList.remove("hidden");
-  }
-
-  function connectWithGoogleOAuth() {
-    const inputId = document.getElementById("oauth-client-id").value.trim() || state.clientId;
-    if (!inputId) {
-      showModalError("Paste a Google OAuth Client ID, or click 'Connect Demo' above.");
-      return;
-    }
-    state.clientId = inputId;
-    localStorage.setItem(CLIENT_ID_KEY, inputId);
-
     if (!window.google || !window.google.accounts || !window.google.accounts.oauth2) {
-      showModalError("Google OAuth script is loading or blocked. Check internet connection.");
+      showToast("Google OAuth Loading", "Please wait a moment and click Connect Google Drive again.", "error");
       return;
     }
 
     try {
       const client = window.google.accounts.oauth2.initTokenClient({
-        client_id: inputId,
+        client_id: clientId,
         scope: "https://www.googleapis.com/auth/drive",
-        prompt: "consent",
         callback: async (resp) => {
           if (resp.error || !resp.access_token) {
-            showModalError(resp.error || "Google authorization cancelled.");
+            handleOAuthError(resp.error || "No access token returned by Google.");
             return;
           }
-          await finalizeLiveDriveConnection(resp.access_token, resp.expires_in || 3599);
-          closeConnectModal();
+          try {
+            const about = await DriveEngine.liveVerifyToken(resp.access_token);
+            const email = (about.user && about.user.emailAddress) || state.user.email || "Google Drive";
+            const expiresSec = Number(resp.expires_in) || 3599;
+            await Security.saveEncryptedTokenSession({
+              accessToken: resp.access_token,
+              email,
+              expiresAt: Date.now() + expiresSec * 1000,
+            });
+            state.driveConnected = true;
+            state.accessToken = resp.access_token;
+            state.driveEmail = email;
+            updateConnectionUI();
+            showToast("Google Drive Connected!", `Connected to ${email}`, "success");
+          } catch (err) {
+            showToast("Verification Failed", err.message || "Could not verify Drive access.", "error");
+          }
         },
       });
-      client.requestAccessToken({ prompt: "consent" });
+      client.requestAccessToken({
+        prompt: "consent",
+        ...(state.user && state.user.email ? { hint: state.user.email } : {}),
+      });
     } catch (err) {
-      showModalError(err.message || "Google OAuth failed.");
+      showToast("Connection Failed", err.message || "Could not open Google Drive popup.", "error");
     }
   }
 
-  async function connectWithManualToken() {
-    const token = document.getElementById("manual-access-token").value.trim();
-    if (!token) {
-      showModalError("Paste a valid Google Access Token.");
-      return;
-    }
-    try {
-      await finalizeLiveDriveConnection(token, 3599);
-      document.getElementById("manual-access-token").value = "";
-      closeConnectModal();
-    } catch (err) {
-      showModalError(err.message || "Token verification failed.");
+  function handleOAuthError(errCode) {
+    const msg = String(errCode);
+    if (msg.toLowerCase().includes("redirect_uri_mismatch")) {
+      showToast(
+        "Domain Not Authorized",
+        "Add this website URL to Authorized JavaScript origins in Google Cloud Console.",
+        "error"
+      );
+    } else if (msg.toLowerCase().includes("access_denied")) {
+      showToast("Access Denied", "Authorization was cancelled or account is not added in Google Test Users.", "error");
+    } else {
+      showToast("Google Auth Error", msg, "error");
     }
   }
 
-  async function finalizeLiveDriveConnection(accessToken, expiresInSec) {
-    const about = await DriveEngine.liveVerifyToken(accessToken);
-    const email = (about.user && about.user.emailAddress) || "Google Drive";
-    await Security.saveEncryptedTokenSession({
-      accessToken,
-      email,
-      expiresAt: Date.now() + expiresInSec * 1000,
-    });
-    sessionStorage.removeItem("nexusdrive_sandbox");
-    state.driveConnected = true;
-    state.driveMode = "live";
-    state.accessToken = accessToken;
-    state.driveEmail = email;
-    updateConnectionUI();
-    showToast("Drive Connected!", `Connected as ${email}`, "success");
-  }
-
-  function connectSandboxDrive() {
+  function handleSessionExpired() {
     Security.clearTokenSession();
-    sessionStorage.setItem("nexusdrive_sandbox", "true");
-    state.driveConnected = true;
-    state.driveMode = "sandbox";
+    state.driveConnected = false;
     state.accessToken = null;
-    state.driveEmail = "Sandbox Drive";
+    state.driveEmail = "";
     updateConnectionUI();
-    closeConnectModal();
-    showToast("Demo Drive Connected!", "Ready for instant scanning, uploads & cloning.", "success");
+    showToast(
+      "Session Expired",
+      "Your Google Drive session has expired. Please click 'Connect Google Drive' to authorize again.",
+      "error"
+    );
   }
 
   function disconnectDrive() {
@@ -376,9 +400,7 @@ const App = (() => {
       }).catch(() => {});
     }
     Security.clearTokenSession();
-    sessionStorage.removeItem("nexusdrive_sandbox");
     state.driveConnected = false;
-    state.driveMode = null;
     state.accessToken = null;
     state.driveEmail = "";
     updateConnectionUI();
@@ -393,18 +415,14 @@ const App = (() => {
     const panel = document.getElementById("tab-" + tabName);
     if (panel) panel.classList.add("active");
 
-    if (tabName === "manage" && state.driveConnected) {
+    if (tabName === "manage" && state.driveConnected && state.accessToken) {
       refreshManager();
     }
   }
 
   // ===========================================================================
-  // TAB 1: SMART CLONE (NITRODRIVE-GRADE ENGINE)
+  // TAB 1: SMART CLONE (100% REAL GOOGLE DRIVE API)
   // ===========================================================================
-  function fillSampleLink() {
-    document.getElementById("clone-source-link").value = "https://drive.google.com/drive/my-drive";
-  }
-
   function getFiltersFromUI() {
     const exactEl = document.getElementById("filter-exact-replace");
     return {
@@ -417,15 +435,15 @@ const App = (() => {
   }
 
   async function scanSourceLink() {
-    if (!state.driveConnected) {
-      openConnectModal();
-      showToast("Connect Drive First", "Please connect your Google Drive first.", "error");
+    if (!state.driveConnected || !state.accessToken) {
+      connectGoogleDrive();
       return;
     }
 
     const rawLink = document.getElementById("clone-source-link").value.trim();
-    if (!rawLink) {
-      showToast("Paste Link", "Enter a Google Drive folder or file link.", "error");
+    const rootId = DriveEngine.extractDriveId(rawLink);
+    if (!rootId) {
+      showToast("Invalid Link", "Please paste a valid Google Drive folder or file link.", "error");
       return;
     }
 
@@ -436,14 +454,7 @@ const App = (() => {
 
     try {
       const filters = getFiltersFromUI();
-      let result;
-      if (state.driveMode === "live" && state.accessToken) {
-        const rootId = DriveEngine.extractDriveId(rawLink);
-        if (!rootId) throw new Error("Invalid Google Drive link.");
-        result = await DriveEngine.liveScanTree(rootId, state.accessToken, filters);
-      } else {
-        result = await DriveEngine.sbScanSourceLink(rawLink, filters);
-      }
+      const result = await DriveEngine.liveScanTree(rootId, state.accessToken, filters);
 
       state.scannedRoot = result.root;
       state.scanStats = result.stats;
@@ -462,9 +473,15 @@ const App = (() => {
       document.getElementById("radar-idle-desc").textContent =
         "Content is filtered and ready for high-speed injection.";
       renderTree();
-      showToast("Nexus Scan Ready", `Found ${result.stats.totalFiles} files (${DriveEngine.formatBytes(result.stats.totalBytes)}).`, "success");
+      showToast(
+        "Nexus Scan Ready",
+        `Found ${result.stats.totalFiles} files (${DriveEngine.formatBytes(result.stats.totalBytes)}).`,
+        "success"
+      );
     } catch (err) {
-      showToast("Scan Failed", err.message || "Could not scan link.", "error");
+      const msg = err.message || String(err);
+      if (msg.includes("401") || msg.includes("Invalid Credentials")) handleSessionExpired();
+      else showToast("Scan Failed", msg, "error");
     } finally {
       btn.disabled = false;
       txt.textContent = "Scan";
@@ -569,9 +586,8 @@ const App = (() => {
   }
 
   async function startCloneTransfer() {
-    if (!state.driveConnected) {
-      openConnectModal();
-      showToast("Connect Drive First", "Connect your Google Drive before starting transfer.", "error");
+    if (!state.driveConnected || !state.accessToken) {
+      connectGoogleDrive();
       return;
     }
 
@@ -595,7 +611,6 @@ const App = (() => {
     setRadarView("running", "creating_folders");
     updateCloneProgress("Nexus Initializing...", 0, 1);
 
-    const isLive = state.driveMode === "live" && state.accessToken;
     const filters = getFiltersFromUI();
     const exactList = filters.exactReplaceNames || [];
     const errors = [];
@@ -604,13 +619,15 @@ const App = (() => {
       const root = state.scannedRoot;
       if (root.kind === "file") {
         setRadarView("running", "copying");
-        if (isLive) {
-          await DriveEngine.withBackoff(() =>
-            DriveEngine.liveCopyFileWithFallback(root.shortcutTargetId || root.id, root.name, "root", root.mimeType, state.accessToken)
-          );
-        } else {
-          await DriveEngine.sbCopyFile(root.id, root.name, "root");
-        }
+        await DriveEngine.withBackoff(() =>
+          DriveEngine.liveCopyFileWithFallback(
+            root.shortcutTargetId || root.id,
+            root.name,
+            "root",
+            root.mimeType,
+            state.accessToken
+          )
+        );
         updateCloneProgress("Nexus Transfer Complete!", 1, 1);
         setRadarView("done");
         refreshQuotaUI();
@@ -620,9 +637,9 @@ const App = (() => {
       const customName = document.getElementById("clone-dest-name").value.trim();
       const rootFolderName = customName || root.name;
 
-      const createdRoot = isLive
-        ? await DriveEngine.withBackoff(() => DriveEngine.liveCreateFolder(rootFolderName, "root", state.accessToken))
-        : await DriveEngine.sbCreateFolder(rootFolderName, "root");
+      const createdRoot = await DriveEngine.withBackoff(() =>
+        DriveEngine.liveCreateFolder(rootFolderName, "root", state.accessToken)
+      );
 
       const copyTasks = [];
       const exactMatchedParentIds = new Set();
@@ -652,9 +669,9 @@ const App = (() => {
         await Promise.all(
           subFolders.map((sf) =>
             folderPool(async () => {
-              const created = isLive
-                ? await DriveEngine.withBackoff(() => DriveEngine.liveCreateFolder(sf.name, parentId, state.accessToken))
-                : await DriveEngine.sbCreateFolder(sf.name, parentId);
+              const created = await DriveEngine.withBackoff(() =>
+                DriveEngine.liveCreateFolder(sf.name, parentId, state.accessToken)
+              );
               await buildTree(sf, created.id);
             })
           )
@@ -676,19 +693,21 @@ const App = (() => {
       setRadarView("running", "copying");
       const total = copyTasks.length + injectTasks.length;
       let done = 0;
-      const copyPool = DriveEngine.createConcurrencyPool(20);
+      const copyPool = DriveEngine.createConcurrencyPool(15);
 
       await Promise.all(
         copyTasks.map((t) =>
           copyPool(async () => {
             try {
-              if (isLive) {
-                await DriveEngine.withBackoff(() =>
-                  DriveEngine.liveCopyFileWithFallback(t.sourceId, t.name, t.parentId, t.mimeType, state.accessToken)
-                );
-              } else {
-                await DriveEngine.sbCopyFile(t.sourceId, t.name, t.parentId);
-              }
+              await DriveEngine.withBackoff(() =>
+                DriveEngine.liveCopyFileWithFallback(
+                  t.sourceId,
+                  t.name,
+                  t.parentId,
+                  t.mimeType,
+                  state.accessToken
+                )
+              );
             } catch (err) {
               errors.push(`${t.name}: ${err.message || err}`);
             } finally {
@@ -701,8 +720,7 @@ const App = (() => {
 
       for (const inj of injectTasks) {
         try {
-          if (isLive) await DriveEngine.liveUploadFileWithProgress(inj.file, inj.parentId, state.accessToken);
-          else await DriveEngine.sbUploadFile(inj.file, inj.parentId);
+          await DriveEngine.liveUploadFileWithProgress(inj.file, inj.parentId, state.accessToken);
         } catch (err) {
           errors.push(`${inj.file.name}: ${err.message || err}`);
         } finally {
@@ -724,7 +742,9 @@ const App = (() => {
       showToast("Nexus Transfer Complete! 🚀", `${total} items saved to your Google Drive.`, "success");
     } catch (err) {
       setRadarView("idle");
-      showToast("Transfer Failed", err.message || "Error occurred.", "error");
+      const msg = err.message || String(err);
+      if (msg.includes("401") || msg.includes("Invalid Credentials")) handleSessionExpired();
+      else showToast("Transfer Failed", msg, "error");
     } finally {
       btn.disabled = false;
     }
@@ -738,12 +758,12 @@ const App = (() => {
   }
 
   // ===========================================================================
-  // TAB 2: UPLOAD FILES
+  // TAB 2: UPLOAD FILES (100% REAL GOOGLE DRIVE UPLOAD)
   // ===========================================================================
   async function handleBatchUpload(fileList) {
-    if (!state.driveConnected) {
-      openConnectModal();
-      showToast("Connect Drive First", "Connect your Google Drive before uploading.", "error");
+    if (!state.driveConnected || !state.accessToken) {
+      connectGoogleDrive();
+      showToast("Drive not connected", "Please click 'Connect Google Drive' first.", "error");
       return;
     }
     if (!fileList || !fileList.length) return;
@@ -758,29 +778,27 @@ const App = (() => {
     state.isUploading = true;
     renderUploadQueue();
 
-    const isLive = state.driveMode === "live" && state.accessToken;
     for (const item of items) {
       item.status = "uploading";
       renderUploadQueue();
       try {
-        const onProg = (p) => {
+        await DriveEngine.liveUploadFileWithProgress(item.file, "root", state.accessToken, (p) => {
           item.pct = p;
           renderUploadQueue();
-        };
-        if (isLive) await DriveEngine.liveUploadFileWithProgress(item.file, "root", state.accessToken, onProg);
-        else await DriveEngine.sbUploadFile(item.file, "root", onProg);
+        });
         item.status = "done";
         item.pct = 100;
       } catch (err) {
         item.status = "error";
         item.err = err.message || "Upload failed";
+        if (String(item.err).includes("401")) handleSessionExpired();
       }
       renderUploadQueue();
     }
 
     state.isUploading = false;
     refreshQuotaUI();
-    showToast("Upload Complete!", "Files uploaded to your Google Drive.", "success");
+    showToast("Upload complete", "Files uploaded directly to your Google Drive.", "success");
   }
 
   function renderUploadQueue() {
@@ -835,11 +853,11 @@ const App = (() => {
   }
 
   // ===========================================================================
-  // TAB 3: MANAGE FILES & PREVIEW
+  // TAB 3: MANAGE FILES & PREVIEW (100% REAL GOOGLE DRIVE API)
   // ===========================================================================
   async function refreshManager() {
-    if (!state.driveConnected) {
-      openConnectModal();
+    if (!state.driveConnected || !state.accessToken) {
+      connectGoogleDrive();
       return;
     }
     const listEl = document.getElementById("manage-file-list");
@@ -851,16 +869,18 @@ const App = (() => {
     const folderId = state.manageCurrentFolder.id;
 
     try {
-      let items;
-      if (state.driveMode === "live" && state.accessToken) {
-        items = await DriveEngine.liveListChildren(folderId, state.accessToken);
-        if (search) {
-          const q = search.toLowerCase();
-          items = items.filter((i) => i.name.toLowerCase().includes(q));
-        }
-      } else {
-        items = await DriveEngine.sbListFolder(folderId, search);
+      let items = await DriveEngine.liveListChildren(folderId, state.accessToken);
+      if (search) {
+        const q = search.toLowerCase();
+        items = items.filter((i) => i.name.toLowerCase().includes(q));
       }
+      items.sort((a, b) => {
+        const af = a.mimeType === "application/vnd.google-apps.folder";
+        const bf = b.mimeType === "application/vnd.google-apps.folder";
+        if (af && !bf) return -1;
+        if (!af && bf) return 1;
+        return a.name.localeCompare(b.name);
+      });
 
       state.manageItems = items;
       document.getElementById("manage-current-folder-name").textContent = state.manageCurrentFolder.name;
@@ -888,7 +908,9 @@ const App = (() => {
         })
         .join("");
     } catch (err) {
-      listEl.innerHTML = `<div class="empty-msg" style="color:#fca5a5">${Security.escapeHtml(err.message)}</div>`;
+      const msg = err.message || String(err);
+      if (msg.includes("401")) handleSessionExpired();
+      listEl.innerHTML = `<div class="empty-msg" style="color:#fca5a5">${Security.escapeHtml(msg)}</div>`;
     }
   }
 
@@ -917,28 +939,12 @@ const App = (() => {
     const previewBox = document.getElementById("manage-preview-area");
     document.getElementById("btn-close-preview").classList.remove("hidden");
 
-    if (state.driveMode === "live" && item.webViewLink) {
+    if (item.webViewLink) {
       const embedUrl = item.webViewLink.replace(/\/view.*$/, "/preview");
       previewBox.innerHTML = `<iframe src="${Security.escapeHtml(embedUrl)}" allow="autoplay" allowfullscreen></iframe>`;
-      return;
+    } else {
+      previewBox.innerHTML = `<div class="empty-preview"><p>${Security.escapeHtml(item.name)}</p></div>`;
     }
-
-    const blob = await DriveEngine.sbGetBlob(item.id);
-    if (blob) {
-      const objUrl = URL.createObjectURL(blob);
-      if (item.mimeType.startsWith("image/")) {
-        previewBox.innerHTML = `<img src="${objUrl}" alt="${Security.escapeHtml(item.name)}" />
-          <a href="${objUrl}" download="${Security.escapeHtml(item.name)}" class="btn btn-hero btn-sm" style="margin-top:12px">Download</a>`;
-        return;
-      }
-      if (item.mimeType.startsWith("video/")) {
-        previewBox.innerHTML = `<video src="${objUrl}" controls style="max-width:100%;max-height:340px;border-radius:8px"></video>`;
-        return;
-      }
-    }
-
-    const text = item.previewText || `Cloud File: ${item.name} (${DriveEngine.formatBytes(Number(item.size || 0))})`;
-    previewBox.innerHTML = `<pre>${Security.escapeHtml(text)}</pre>`;
   }
 
   function closePreview() {
@@ -957,15 +963,15 @@ const App = (() => {
   }
 
   async function createManagerFolder() {
+    if (!state.driveConnected || !state.accessToken) {
+      connectGoogleDrive();
+      return;
+    }
     const input = document.getElementById("manage-new-folder-input");
     const name = input.value.trim();
     if (!name) return;
     try {
-      if (state.driveMode === "live" && state.accessToken) {
-        await DriveEngine.liveCreateFolder(name, state.manageCurrentFolder.id, state.accessToken);
-      } else {
-        await DriveEngine.sbCreateFolder(name, state.manageCurrentFolder.id);
-      }
+      await DriveEngine.liveCreateFolder(name, state.manageCurrentFolder.id, state.accessToken);
       input.value = "";
       refreshManager();
       showToast("Folder Created", `Created "${name}"`, "success");
@@ -976,14 +982,10 @@ const App = (() => {
 
   async function deleteSelectedManaged() {
     const ids = Object.keys(state.manageSelected).filter((k) => state.manageSelected[k]);
-    if (!ids.length) return;
+    if (!ids.length || !state.accessToken) return;
     try {
-      if (state.driveMode === "live" && state.accessToken) {
-        await DriveEngine.liveDeleteFiles(ids, state.accessToken);
-      } else {
-        await DriveEngine.sbDeleteItems(ids);
-      }
-      showToast("Deleted", `${ids.length} item(s) removed.`, "success");
+      await DriveEngine.liveDeleteFiles(ids, state.accessToken);
+      showToast("Deleted", `${ids.length} item(s) moved to Trash.`, "success");
       refreshManager();
       refreshQuotaUI();
     } catch (err) {
@@ -1000,16 +1002,11 @@ const App = (() => {
     openAuth,
     toggleAuthMode,
     togglePasswordVisibility,
-    quickDemoAccountLogin,
+    loginWithGoogle,
     logout,
-    openConnectModal,
-    closeConnectModal,
-    connectWithGoogleOAuth,
-    connectWithManualToken,
-    connectSandboxDrive,
+    connectGoogleDrive,
     disconnectDrive,
     switchTab,
-    fillSampleLink,
     scanSourceLink,
     toggleTreeNode,
     selectAllTree,

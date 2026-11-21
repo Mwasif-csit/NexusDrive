@@ -15,7 +15,7 @@
   <div id="toast-container" class="toast-container" aria-live="polite"></div>
 
   <!-- =========================================================================
-       VIEW 1: LANDING PAGE (PRO DARK SLATE + ELECTRIC GOLD THEME)
+       VIEW 1: LANDING PAGE
        ========================================================================= -->
   <div id="view-landing" class="view-section active">
     <header class="sticky-header">
@@ -42,7 +42,6 @@
     </header>
 
     <main>
-      <!-- Hero Section -->
       <section class="hero-wrapper">
         <div class="hero-glow-left"></div>
         <div class="hero-glow-right"></div>
@@ -373,7 +372,7 @@
   </div>
 
   <!-- =========================================================================
-       VIEW 3: SPLIT-SCREEN AUTH PAGE (LIKE NITRODRIVE)
+       VIEW 3: PRODUCTION SPLIT-SCREEN AUTH PAGE (REAL GOOGLE + EMAIL AUTH)
        ========================================================================= -->
   <div id="view-auth" class="view-section">
     <div class="auth-split">
@@ -399,8 +398,8 @@
               <p id="auth-subtitle" class="auth-sub">Sign in to continue to NexusDrive</p>
             </div>
 
-            <!-- Continue with Google -->
-            <button type="button" class="btn btn-outline btn-full mb-20" onclick="App.quickDemoAccountLogin()">
+            <!-- Real Google Sign-In -->
+            <button type="button" id="btn-google-login" class="btn btn-outline btn-full mb-20" onclick="App.loginWithGoogle()">
               <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="currentColor" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="currentColor" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="currentColor" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
               <span>Continue with Google</span>
             </button>
@@ -464,10 +463,9 @@
   </div>
 
   <!-- =========================================================================
-       VIEW 4: PRO DASHBOARD (EXACT NITRODRIVE FLOW & CLEAN PRO UI)
+       VIEW 4: PRODUCTION PRO DASHBOARD (100% LIVE GOOGLE DRIVE API)
        ========================================================================= -->
   <div id="view-dashboard" class="view-section">
-    <!-- Sticky Top Control Panel Navbar -->
     <nav class="dash-navbar">
       <div class="container dash-nav-inner">
         <div class="brand" onclick="App.switchTab('clone')">
@@ -498,7 +496,6 @@
     </nav>
 
     <main class="container dash-body">
-      <!-- Greeting Header -->
       <header class="dash-greeting">
         <h2>Welcome, <span id="dash-user-name">User</span>!</h2>
         <div class="greeting-badges">
@@ -507,7 +504,7 @@
         </div>
       </header>
 
-      <!-- Workspace Tools + Connect Google Drive Row -->
+      <!-- Workspace Tools + Real Google Drive Connect -->
       <div class="workspace-header-row">
         <h3>Workspace Tools</h3>
 
@@ -515,10 +512,7 @@
           <div id="quota-pill" class="pill-outline hidden">
             <span id="quota-text">0 GB / 15 GB</span>
           </div>
-          <button type="button" id="btn-demo-drive" class="btn btn-outline btn-sm" onclick="App.connectSandboxDrive()">
-            Demo Drive
-          </button>
-          <button type="button" id="btn-connect-drive" class="btn btn-hero btn-sm" onclick="App.openConnectModal()">
+          <button type="button" id="btn-connect-drive" class="btn btn-hero btn-sm" onclick="App.connectGoogleDrive()">
             <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
             <span>Connect Google Drive</span>
           </button>
@@ -544,11 +538,10 @@
         </div>
 
         <!-- ===================================================================
-             TAB 1: SMART CLONE (2-COLUMN PRO LAYOUT)
+             TAB 1: SMART CLONE
              =================================================================== -->
         <section id="tab-clone" class="tab-content active">
           <div class="two-col-grid">
-            <!-- Left: Smart Clone Controls -->
             <div class="sub-card glass-card">
               <div class="card-top-row">
                 <div class="card-icon-primary">
@@ -558,12 +551,10 @@
                   <h3>Nexus Smart Clone</h3>
                   <p>Automatic folder naming &amp; smart promo filtering.</p>
                 </div>
-                <button type="button" class="btn btn-outline btn-xs" onclick="App.fillSampleLink()">Sample</button>
               </div>
 
               <div class="hr-line"></div>
 
-              <!-- Link Input + Scan -->
               <div class="field">
                 <label for="clone-source-link">Google Drive Link</label>
                 <div class="input-action-row">
@@ -575,7 +566,6 @@
                 </div>
               </div>
 
-              <!-- Smart Cleaner & Exact File Auto-Replace -->
               <div class="cleaner-box">
                 <div class="cleaner-title">
                   <span class="text-emerald">🛡️</span>
@@ -594,13 +584,11 @@
                 <p class="hint-xs">Enter full file names — these files will be deselected and replaced by your injected files.</p>
               </div>
 
-              <!-- Optional Custom Folder Name -->
               <div class="field">
                 <label for="clone-dest-name">Custom Folder Name (Optional)</label>
                 <input id="clone-dest-name" type="text" placeholder="Leave blank to keep original folder name" class="input-sm" />
               </div>
 
-              <!-- Selected Content Tree + Injection Queue -->
               <div id="tree-section" class="tree-wrap hidden">
                 <div class="tree-box">
                   <div class="tree-head">
@@ -613,7 +601,6 @@
                   <div id="tree-container" class="tree-scroll custom-scrollbar"></div>
                 </div>
 
-                <!-- Injection Queue -->
                 <div class="inject-queue-box">
                   <div class="iq-head">
                     <span class="iq-title">📦 INJECTION QUEUE</span>
@@ -624,13 +611,11 @@
                 </div>
               </div>
 
-              <!-- Primary Action Button -->
               <button type="button" id="btn-start-clone" class="btn btn-hero btn-xl btn-full" onclick="App.startCloneTransfer()">
                 <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
                 <span>Start Nexus Transfer</span>
               </button>
 
-              <!-- Progress Under Button -->
               <div id="clone-status-box" class="hidden clone-progress-wrap">
                 <div class="progress-label-row">
                   <span id="clone-progress-msg">Initializing...</span>
@@ -643,7 +628,6 @@
               </div>
             </div>
 
-            <!-- Right: Nexus Control Live Radar Card -->
             <div class="sub-card glass-card control-center-card">
               <div id="radar-idle-view" class="radar-state">
                 <div class="radar-circle-idle">
@@ -675,11 +659,10 @@
         </section>
 
         <!-- ===================================================================
-             TAB 2: UPLOAD (2-COLUMN PRO LAYOUT)
+             TAB 2: UPLOAD
              =================================================================== -->
         <section id="tab-upload" class="tab-content">
           <div class="two-col-grid">
-            <!-- Left: Dropzone -->
             <div class="sub-card glass-card">
               <div class="card-top-row">
                 <div class="card-icon-primary">☁️</div>
@@ -710,7 +693,6 @@
               </div>
             </div>
 
-            <!-- Right: Results -->
             <div class="sub-card glass-card control-center-card">
               <div class="radar-state">
                 <div class="radar-circle-idle" id="upload-result-ico">✓</div>
@@ -723,11 +705,10 @@
         </section>
 
         <!-- ===================================================================
-             TAB 3: MANAGE (2-COLUMN PRO LAYOUT + PREVIEW PLAYER)
+             TAB 3: MANAGE
              =================================================================== -->
         <section id="tab-manage" class="tab-content">
           <div class="two-col-grid">
-            <!-- Left: File Explorer -->
             <div class="sub-card glass-card manager-col">
               <div class="card-top-row">
                 <div class="card-icon-primary">📁</div>
@@ -761,7 +742,6 @@
               </div>
             </div>
 
-            <!-- Right: Live Preview Area -->
             <div class="sub-card glass-card manager-col">
               <div class="mgr-preview-head">
                 <h4>Preview Area</h4>
@@ -779,48 +759,6 @@
         </section>
       </div>
     </main>
-  </div>
-
-  <!-- =========================================================================
-       MODAL: CONNECT GOOGLE DRIVE (FALLBACK / DEMO / ADVANCED TOKEN)
-       ========================================================================= -->
-  <div id="connect-modal" class="modal-overlay hidden">
-    <div class="modal-box glass-card">
-      <div class="modal-head">
-        <div>
-          <h3>Connect Google Drive</h3>
-          <p>Select how you want to connect your Drive</p>
-        </div>
-        <button type="button" class="btn btn-outline btn-xs" onclick="App.closeConnectModal()">✕</button>
-      </div>
-      <div class="modal-body">
-        <div id="modal-error-box" class="modal-err hidden"></div>
-
-        <div class="modal-opt primary">
-          <div>
-            <h4>Sandbox Test Drive (Instant Mode)</h4>
-            <p>Test scanning, real file uploads, cloning, and video/text previews immediately.</p>
-          </div>
-          <button type="button" id="btn-modal-sandbox" class="btn btn-hero btn-sm" onclick="App.connectSandboxDrive()">Connect Demo</button>
-        </div>
-
-        <div class="modal-opt">
-          <div class="w-full">
-            <h4>Real Google Drive (OAuth 2.0 / Token)</h4>
-            <p>Connect your personal Gmail Google Drive safely.</p>
-            <div class="modal-stack">
-              <input id="oauth-client-id" type="text" placeholder="Google OAuth Client ID" class="input-sm" />
-              <button type="button" class="btn btn-outline btn-full btn-sm" onclick="App.connectWithGoogleOAuth()">Authorize with Google OAuth</button>
-              <div class="or-sep"><span>or paste token</span></div>
-              <div class="input-action-row">
-                <input id="manual-access-token" type="password" placeholder="Paste ya29... token" class="input-sm" />
-                <button type="button" class="btn btn-hero btn-sm" onclick="App.connectWithManualToken()">Connect</button>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
   </div>
 
   <!-- Scripts -->

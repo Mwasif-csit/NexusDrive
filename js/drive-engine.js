@@ -1,15 +1,13 @@
 /**
- * HyperDrive 1000X Google Drive v3 Engine + Persistent IndexedDB Sandbox Store
- * - Server-side pointer copy (files.copy) for 1000X instant cloning
- * - Automatic Google Docs/Sheets/Slides export + re-upload fallback
- * - Real byte-level progress Resumable Upload (supports large files 5GB+)
+ * NexusDrive 1000X Pure Google Drive API v3 Engine
+ * - Direct server-side pointer copy (files.copy) inside Google's datacenters
+ * - Google Docs/Sheets/Slides export & re-upload fallback
+ * - Resumable chunked upload with live byte progress for large files
  * - Adaptive Exponential Backoff for 429/403/5xx rate limits
- * - Persistent IndexedDB Sandbox Store for zero-config full testing
  */
 const DriveEngine = (() => {
   function getSiteApiKey() {
     return (
-      localStorage.getItem("nexusdrive_api_key_v1") ||
       (window.NEXUSDRIVE_CONFIG && window.NEXUSDRIVE_CONFIG.GOOGLE_API_KEY) ||
       ""
     ).trim();
@@ -71,33 +69,6 @@ const DriveEngine = (() => {
     return false;
   }
 
-  function transformName(originalName, kind, rules) {
-    if (!rules) return Security.sanitizeName(originalName);
-    let name = originalName;
-    if (rules.removeWords && rules.removeWords.length) {
-      for (const w of rules.removeWords) {
-        const cw = w.trim();
-        if (cw) {
-          const esc = cw.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-          name = name.replace(new RegExp(esc, "gi"), "");
-        }
-      }
-    }
-    name = name.replace(/\s{2,}/g, " ").trim() || originalName;
-    const prefix = rules.prefix ? rules.prefix.trim() + " " : "";
-    const suffix = rules.suffix ? " " + rules.suffix.trim() : "";
-
-    if (kind === "file") {
-      const dot = name.lastIndexOf(".");
-      if (dot > 0 && dot < name.length - 1) {
-        return Security.sanitizeName(
-          prefix + name.slice(0, dot).trim() + suffix + name.slice(dot)
-        );
-      }
-    }
-    return Security.sanitizeName(prefix + name + suffix);
-  }
-
   function createConcurrencyPool(concurrency) {
     const max = Math.max(1, Math.min(35, concurrency || 20));
     let active = 0;
@@ -118,7 +89,7 @@ const DriveEngine = (() => {
       });
   }
 
-  async function withBackoff(op, maxRetries = 6) {
+  async function withBackoff(op, maxRetries = 7) {
     let lastErr;
     for (let i = 0; i < maxRetries; i++) {
       try {
@@ -131,6 +102,7 @@ const DriveEngine = (() => {
           msg.includes("[500]") ||
           msg.includes("[502]") ||
           msg.includes("[503]") ||
+          msg.includes("[504]") ||
           (msg.includes("[403]") &&
             /rateLimitExceeded|userRateLimitExceeded|quotaExceeded|usageLimits/i.test(msg));
         if (!retryable || i === maxRetries - 1) throw err;
@@ -141,16 +113,21 @@ const DriveEngine = (() => {
     throw lastErr;
   }
 
-  // ===========================================================================
-  // 2. LIVE GOOGLE DRIVE API v3 CLIENT
-  // ===========================================================================
+  async function fetchGoogleUserProfile(accessToken) {
+    const res = await fetch("https://www.googleapis.com/oauth2/v3/userinfo", {
+      headers: { Authorization: "Bearer " + accessToken },
+    });
+    if (!res.ok) throw new Error("Unable to load Google profile.");
+    return await res.json();
+  }
+
   async function liveVerifyToken(accessToken) {
     const res = await fetch(
       "https://www.googleapis.com/drive/v3/about?fields=user(displayName,emailAddress,photoLink),storageQuota",
       { headers: { Authorization: "Bearer " + accessToken } }
     );
     if (!res.ok) {
-      throw new Error("Invalid or expired Google Drive OAuth token.");
+      throw new Error(`Drive authorization invalid [${res.status}]. Please reconnect Google Drive.`);
     }
     return await res.json();
   }
@@ -248,7 +225,6 @@ const DriveEngine = (() => {
     const body = { name: Security.sanitizeName(name) };
     if (parentId && parentId !== "root") body.parents = [parentId];
 
-    // Primary 1000X path: Direct Google internal server-side copy
     const res = await fetch(
       `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(sourceFileId)}/copy?supportsAllDrives=true`,
       {
@@ -265,12 +241,10 @@ const DriveEngine = (() => {
     }
 
     const errText = await res.text();
-    // If rate limit or auth error, throw so exponential backoff handles it
     if (res.status === 429 || res.status === 401 || res.status >= 500) {
       throw new Error(`Copy Failed [${res.status}]: ${errText}`);
     }
 
-    // Fallback for restricted/Google Docs files: Export/Download + Re-Upload
     const exp = getExportDescriptor(mimeType);
     const dlUrl = exp
       ? `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(sourceFileId)}/export?mimeType=${encodeURIComponent(exp.exportMime)}`
@@ -291,16 +265,10 @@ const DriveEngine = (() => {
     return await liveUploadFileWithProgress(upFile, parentId, accessToken);
   }
 
-  /**
-   * Real Resumable + Multipart Uploader with Live Byte Percentage Progress!
-   * - Small files (< 4 MB): instant multipart upload
-   * - Large files (>= 4 MB): official Google Drive Resumable Upload session via XHR with live %
-   */
   async function liveUploadFileWithProgress(file, parentId, accessToken, onProgress) {
     const meta = { name: Security.sanitizeName(file.name) };
     if (parentId && parentId !== "root") meta.parents = [parentId];
 
-    // Multipart fast path for small files under 4 MB
     if (file.size < 4 * 1024 * 1024) {
       if (onProgress) onProgress(30);
       const fd = new FormData();
@@ -320,7 +288,6 @@ const DriveEngine = (() => {
       return data;
     }
 
-    // Resumable Upload session for large files (handles GB-sized videos & archives cleanly!)
     const initRes = await fetch(
       "https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&supportsAllDrives=true&fields=id,name,size,mimeType,webViewLink",
       {
@@ -369,16 +336,23 @@ const DriveEngine = (() => {
 
   async function liveDeleteFiles(fileIds, accessToken) {
     await Promise.all(
-      fileIds.map((id) =>
-        fetch(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(id)}?supportsAllDrives=true`, {
-          method: "PATCH",
-          headers: {
-            Authorization: "Bearer " + accessToken,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ trashed: true }),
-        })
-      )
+      fileIds.map(async (id) => {
+        const res = await fetch(
+          `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(id)}?supportsAllDrives=true`,
+          {
+            method: "PATCH",
+            headers: {
+              Authorization: "Bearer " + accessToken,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ trashed: true }),
+          }
+        );
+        if (!res.ok) {
+          const txt = await res.text();
+          throw new Error(`Delete failed [${res.status}]: ${txt}`);
+        }
+      })
     );
   }
 
@@ -463,280 +437,13 @@ const DriveEngine = (() => {
     return { root, stats };
   }
 
-  // ===========================================================================
-  // 3. PERSISTENT INDEXEDDB SANDBOX DRIVE STORE
-  // ===========================================================================
-  const DB_NAME = "HyperDriveSandboxDB";
-  const DB_VERSION = 1;
-  const STORE_ITEMS = "drive_items";
-  const STORE_BLOBS = "file_blobs";
-
-  function openDB() {
-    return new Promise((resolve, reject) => {
-      const req = indexedDB.open(DB_NAME, DB_VERSION);
-      req.onupgradeneeded = (e) => {
-        const db = e.target.result;
-        if (!db.objectStoreNames.contains(STORE_ITEMS)) {
-          db.createObjectStore(STORE_ITEMS, { keyPath: "id" });
-        }
-        if (!db.objectStoreNames.contains(STORE_BLOBS)) {
-          db.createObjectStore(STORE_BLOBS, { keyPath: "id" });
-        }
-      };
-      req.onsuccess = () => resolve(req.result);
-      req.onerror = () => reject(req.error);
-    });
-  }
-
-  async function seedSandboxIfEmpty() {
-    const db = await openDB();
-    const tx = db.transaction(STORE_ITEMS, "readonly");
-    const count = await new Promise((res) => {
-      const r = tx.objectStore(STORE_ITEMS).count();
-      r.onsuccess = () => res(r.result);
-    });
-    if (count > 0) return;
-
-    const now = new Date().toISOString();
-    const initial = [
-      { id: "sb_folder_1", name: "01 - Cloud Architecture & FYP Bundle", mimeType: "application/vnd.google-apps.folder", kind: "folder", parentId: "root", size: 0, modifiedTime: now },
-      { id: "sb_vid_1", name: "01. 1000X Server-Side Pointer Cloning.mp4", mimeType: "video/mp4", kind: "file", parentId: "sb_folder_1", size: 1845493760, modifiedTime: now, previewText: "1000X Pointer Copy Architecture Video Stream" },
-      { id: "sb_pdf_1", name: "02. Zero-Trust AES-GCM Security Guide.pdf", mimeType: "application/pdf", kind: "file", parentId: "sb_folder_1", size: 48234496, modifiedTime: now, previewText: "System Security & OAuth 2.0 Architecture Blueprint" },
-      { id: "sb_promo_1", name: "PROMO - Join Telegram Ads & Bonus.txt", mimeType: "text/plain", kind: "file", parentId: "sb_folder_1", size: 4096, modifiedTime: now, previewText: "Promotional junk file (auto-filtered by Smart Cleaner)" },
-      { id: "sb_bonus_1", name: "500$ bonus.pdf", mimeType: "application/pdf", kind: "file", parentId: "sb_folder_1", size: 120400, modifiedTime: now, previewText: "Exact promo file replaceable by your injected file" },
-      { id: "sb_zip_root", name: "Production_Starter_Kit_v2.zip", mimeType: "application/zip", kind: "file", parentId: "root", size: 854589440, modifiedTime: now, previewText: "Archive Package (815 MB)" },
-    ];
-    const wtx = db.transaction(STORE_ITEMS, "readwrite");
-    const store = wtx.objectStore(STORE_ITEMS);
-    initial.forEach((it) => store.put(it));
-    await new Promise((res) => { wtx.oncomplete = res; });
-  }
-
-  async function sbGetAllItems() {
-    await seedSandboxIfEmpty();
-    const db = await openDB();
-    return new Promise((resolve) => {
-      const tx = db.transaction(STORE_ITEMS, "readonly");
-      const req = tx.objectStore(STORE_ITEMS).getAll();
-      req.onsuccess = () => resolve(req.result || []);
-    });
-  }
-
-  async function sbListFolder(parentId = "root", search = "") {
-    const all = await sbGetAllItems();
-    if (search && search.trim()) {
-      const q = search.toLowerCase().trim();
-      return all.filter((i) => i.name.toLowerCase().includes(q));
-    }
-    return all
-      .filter((i) => i.parentId === parentId)
-      .sort((a, b) => {
-        if (a.kind === "folder" && b.kind !== "folder") return -1;
-        if (a.kind !== "folder" && b.kind === "folder") return 1;
-        return a.name.localeCompare(b.name);
-      });
-  }
-
-  async function sbCreateFolder(name, parentId = "root") {
-    const db = await openDB();
-    const folder = {
-      id: "sb_f_" + Date.now() + "_" + Math.random().toString(36).slice(2, 7),
-      name: Security.sanitizeName(name),
-      mimeType: "application/vnd.google-apps.folder",
-      kind: "folder",
-      parentId: parentId || "root",
-      size: 0,
-      modifiedTime: new Date().toISOString(),
-    };
-    const tx = db.transaction(STORE_ITEMS, "readwrite");
-    tx.objectStore(STORE_ITEMS).put(folder);
-    await new Promise((res) => { tx.oncomplete = res; });
-    return folder;
-  }
-
-  async function sbCopyFile(sourceId, name, parentId = "root") {
-    const all = await sbGetAllItems();
-    const src = all.find((x) => x.id === sourceId);
-    const db = await openDB();
-    const newId = "sb_c_" + Date.now() + "_" + Math.random().toString(36).slice(2, 7);
-    const copy = {
-      id: newId,
-      name: Security.sanitizeName(name || (src ? src.name : "Cloned_File")),
-      mimeType: src ? src.mimeType : "application/octet-stream",
-      kind: "file",
-      parentId: parentId || "root",
-      size: src ? src.size : 52428800,
-      modifiedTime: new Date().toISOString(),
-      previewText: src && src.previewText ? src.previewText : `Cloned at 1000X speed from source (${sourceId})`,
-    };
-    const tx = db.transaction(STORE_ITEMS, "readwrite");
-    tx.objectStore(STORE_ITEMS).put(copy);
-    await new Promise((res) => { tx.oncomplete = res; });
-    return copy;
-  }
-
-  async function sbUploadFile(file, parentId = "root", onProgress) {
-    if (onProgress) onProgress(35);
-    const db = await openDB();
-    const id = "sb_u_" + Date.now() + "_" + Math.random().toString(36).slice(2, 7);
-    let previewText = null;
-    if (file.type.startsWith("text/") || /\.(txt|md|json|csv|js|html|css|log)$/i.test(file.name)) {
-      previewText = (await file.text()).slice(0, 6000);
-    }
-    const item = {
-      id,
-      name: Security.sanitizeName(file.name),
-      mimeType: file.type || "application/octet-stream",
-      kind: "file",
-      parentId: parentId || "root",
-      size: file.size,
-      modifiedTime: new Date().toISOString(),
-      previewText,
-    };
-    const tx = db.transaction([STORE_ITEMS, STORE_BLOBS], "readwrite");
-    tx.objectStore(STORE_ITEMS).put(item);
-    tx.objectStore(STORE_BLOBS).put({ id, blob: file });
-    await new Promise((res) => { tx.oncomplete = res; });
-    if (onProgress) onProgress(100);
-    return item;
-  }
-
-  async function sbGetBlob(id) {
-    const db = await openDB();
-    return new Promise((resolve) => {
-      const tx = db.transaction(STORE_BLOBS, "readonly");
-      const req = tx.objectStore(STORE_BLOBS).get(id);
-      req.onsuccess = () => resolve(req.result ? req.result.blob : null);
-      req.onerror = () => resolve(null);
-    });
-  }
-
-  async function sbDeleteItems(ids) {
-    const all = await sbGetAllItems();
-    const idSet = new Set(ids);
-    let changed = true;
-    while (changed) {
-      changed = false;
-      for (const it of all) {
-        if (!idSet.has(it.id) && idSet.has(it.parentId)) {
-          idSet.add(it.id);
-          changed = true;
-        }
-      }
-    }
-    const db = await openDB();
-    const tx = db.transaction([STORE_ITEMS, STORE_BLOBS], "readwrite");
-    const iStore = tx.objectStore(STORE_ITEMS);
-    const bStore = tx.objectStore(STORE_BLOBS);
-    idSet.forEach((id) => {
-      iStore.delete(id);
-      bStore.delete(id);
-    });
-    await new Promise((res) => { tx.oncomplete = res; });
-    return idSet.size;
-  }
-
-  async function sbGetQuota() {
-    const all = await sbGetAllItems();
-    const used = all.reduce((acc, it) => acc + Number(it.size || 0), 0);
-    return { limit: 16106127360, usage: used };
-  }
-
-  async function sbScanSourceLink(link, filters) {
-    const all = await sbGetAllItems();
-    const stats = { totalFiles: 0, totalFolders: 0, totalBytes: 0, filteredOut: 0 };
-    const id = extractDriveId(link) || "root";
-
-    const matched = all.find((x) => x.id === id);
-    if (matched && matched.kind === "file") {
-      stats.totalFiles = 1;
-      stats.totalBytes = matched.size;
-      return { root: matched, stats };
-    }
-
-    if (id !== "root" && !matched) {
-      const rawExternal = {
-        id: "ext_root_" + id.slice(0, 8),
-        name: `External Shared Folder (${id.slice(0, 10)})`,
-        mimeType: "application/vnd.google-apps.folder",
-        kind: "folder",
-        children: [
-          {
-            id: "ext_sub_1",
-            name: "Module 01 - Shared Source Videos",
-            mimeType: "application/vnd.google-apps.folder",
-            kind: "folder",
-            children: [
-              { id: "ext_f1", name: "01. Cloud_Architecture_Masterclass.mp4", mimeType: "video/mp4", kind: "file", size: 1420000000 },
-              { id: "ext_f2", name: "02. API_Optimization_Slides.pdf", mimeType: "application/pdf", kind: "file", size: 32500000 },
-              { id: "ext_promo", name: "PROMO_Telegram_Ads_Link.txt", mimeType: "text/plain", kind: "file", size: 2048 },
-            ],
-          },
-          { id: "ext_f3", name: "Complete_Source_Package.zip", mimeType: "application/zip", kind: "file", size: 640000000 },
-        ],
-      };
-
-      function filterExt(node) {
-        stats.totalFolders += 1;
-        const kids = [];
-        for (const c of node.children || []) {
-          if (shouldFilterOut(c.name, c.kind, filters)) {
-            stats.filteredOut += 1;
-            continue;
-          }
-          if (c.kind === "folder") kids.push(filterExt(c));
-          else {
-            stats.totalFiles += 1;
-            stats.totalBytes += c.size || 0;
-            kids.push(c);
-          }
-        }
-        return { ...node, children: kids };
-      }
-      return { root: filterExt(rawExternal), stats };
-    }
-
-    const startId = matched ? matched.id : "root";
-    const startName = matched ? matched.name : "My Google Drive (Source)";
-
-    function buildTree(parentId, folderName, depth = 0) {
-      stats.totalFolders += 1;
-      if (depth > 12) return { id: parentId, name: folderName, kind: "folder", children: [] };
-      const children = all.filter((x) => x.parentId === parentId);
-      const subFolders = [];
-      const files = [];
-
-      for (const ch of children) {
-        if (shouldFilterOut(ch.name, ch.kind, filters)) {
-          stats.filteredOut += 1;
-          continue;
-        }
-        if (ch.kind === "folder") subFolders.push(buildTree(ch.id, ch.name, depth + 1));
-        else {
-          stats.totalFiles += 1;
-          stats.totalBytes += Number(ch.size || 0);
-          files.push({ ...ch });
-        }
-      }
-      return {
-        id: parentId,
-        name: folderName,
-        mimeType: "application/vnd.google-apps.folder",
-        kind: "folder",
-        children: [...subFolders, ...files],
-      };
-    }
-
-    return { root: buildTree(startId, startName), stats };
-  }
-
   return {
     extractDriveId,
     formatBytes,
     normalizeText,
-    transformName,
     createConcurrencyPool,
     withBackoff,
+    fetchGoogleUserProfile,
     liveVerifyToken,
     liveScanTree,
     liveCreateFolder,
@@ -744,13 +451,5 @@ const DriveEngine = (() => {
     liveUploadFileWithProgress,
     liveListChildren,
     liveDeleteFiles,
-    sbListFolder,
-    sbCreateFolder,
-    sbCopyFile,
-    sbUploadFile,
-    sbGetBlob,
-    sbDeleteItems,
-    sbGetQuota,
-    sbScanSourceLink,
   };
 })();
