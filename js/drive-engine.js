@@ -80,7 +80,7 @@ const DriveEngine = (() => {
   }
 
   function createConcurrencyPool(concurrency) {
-    const max = Math.max(1, Math.min(60, concurrency || 25));
+    const max = Math.max(1, Math.min(100, concurrency || 25));
     let active = 0;
     const queue = [];
     const next = () => {
@@ -464,8 +464,8 @@ const DriveEngine = (() => {
       specs.map((s, idx) => ({ ...s, idx })),
       50
     );
-    const batchPool = createConcurrencyPool(3);
-    const fallbackPool = createConcurrencyPool(15);
+    const batchPool = createConcurrencyPool(6);
+    const fallbackPool = createConcurrencyPool(20);
 
     await Promise.all(
       chunks.map((chunk) =>
@@ -510,9 +510,14 @@ const DriveEngine = (() => {
 
   async function liveBatchCopyFiles(tasks, accessToken, onItemDone) {
     if (!tasks.length) return;
-    const chunks = chunkArray(tasks, 50);
-    const batchPool = createConcurrencyPool(3);
-    const retryPool = createConcurrencyPool(20);
+    // Adaptive micro-batches (~10 chunks for >=15 files) give smooth 10%, 20%, 30%... progress bars while keeping high HTTP/2 batch throughput
+    const chunkSize =
+      tasks.length <= 15
+        ? Math.max(1, Math.ceil(tasks.length / 5))
+        : Math.min(50, Math.max(5, Math.ceil(tasks.length / 10)));
+    const chunks = chunkArray(tasks, chunkSize);
+    const batchPool = createConcurrencyPool(8);
+    const retryPool = createConcurrencyPool(25);
 
     await Promise.all(
       chunks.map((chunk) =>

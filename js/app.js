@@ -25,6 +25,7 @@ const App = (() => {
     isCloning: false,
     uploadQueue: [],
     isUploading: false,
+    uploadStartTs: 0,
     lastUploadRenderTs: 0,
     manageCurrentFolder: { id: "root", name: "My Drive" },
     manageHistory: [],
@@ -727,12 +728,17 @@ const App = (() => {
       let done = 0;
       let totalEstimated = Math.max(1, plannedFiles);
       let lastProgTs = 0;
+      let lastPct = -1;
 
-      const tickProgress = (label, force = false) => {
+      const tickProgress = (labelPrefix, force = false) => {
         const now = performance.now();
-        if (!force && now - lastProgTs < 80) return;
+        const pct = Math.min(100, Math.round((done / totalEstimated) * 100));
+        if (!force && pct === lastPct && now - lastProgTs < 80) return;
+        lastPct = pct;
         lastProgTs = now;
-        updateCloneProgress(label, done, totalEstimated);
+        const sec = Math.max(0.05, (now - t0) / 1000);
+        const fps = (done / sec).toFixed(done / sec >= 100 ? 0 : 1);
+        updateCloneProgress(`${labelPrefix}: ${done}/${totalEstimated} • ⚡ ${fps} files/sec`, done, totalEstimated, fps);
       };
 
       setRadarView("running", "copying");
@@ -770,7 +776,7 @@ const App = (() => {
             DriveEngine.liveBatchCopyFiles(levelCopyTasks, state.accessToken, (err, t) => {
               if (err) errors.push(`${t.name}: ${err.message || err}`);
               done++;
-              tickProgress(`Nexus Cloning: ${done}/${totalEstimated}`, done === totalEstimated);
+              tickProgress("Nexus Cloning", done === totalEstimated);
             })
           );
         }
@@ -813,17 +819,19 @@ const App = (() => {
               errors.push(`${inj.file.name}: ${err.message || err}`);
             } finally {
               done++;
-              tickProgress(`Injecting Files: ${done}/${totalEstimated}`, done === totalEstimated);
+              tickProgress("Injecting Files", done === totalEstimated);
             }
           })
         ),
       ]);
 
       const total = plannedFiles + injectTasks.length;
-      const elapsedSec = ((performance.now() - t0) / 1000).toFixed(1);
-      updateCloneProgress("Nexus Transfer Complete!", total, Math.max(1, total));
+      const elapsedSecNum = Math.max(0.05, (performance.now() - t0) / 1000);
+      const elapsedSec = elapsedSecNum.toFixed(1);
+      const avgFps = (total / elapsedSecNum).toFixed(total / elapsedSecNum >= 100 ? 0 : 1);
+      updateCloneProgress(`Nexus Transfer Complete! • ⚡ ${avgFps} files/sec`, total, Math.max(1, total), avgFps);
       setRadarView("done");
-      document.getElementById("radar-done-desc").textContent = `Cloned "${rootFolderName}" (${total} items) in ${elapsedSec}s!`;
+      document.getElementById("radar-done-desc").textContent = `Cloned "${rootFolderName}" (${total} items) in ${elapsedSec}s (⚡ ${avgFps} files/sec)!`;
       if (errors.length) {
         errBox.classList.remove("hidden");
         errBox.innerHTML = errors.map((e) => `<div>• ${Security.escapeHtml(e)}</div>`).join("");
@@ -831,7 +839,7 @@ const App = (() => {
       state.injectedFiles = [];
       renderInjectTags();
       refreshQuotaUI();
-      showToast("Nexus Transfer Complete! 🚀", `${total} items saved to your Google Drive in ${elapsedSec}s.`, "success");
+      showToast("Nexus Transfer Complete! 🚀", `${total} items saved in ${elapsedSec}s (${avgFps} files/sec).`, "success");
     } catch (err) {
       setRadarView("idle");
       const msg = err.message || String(err);
@@ -842,11 +850,15 @@ const App = (() => {
     }
   }
 
-  function updateCloneProgress(msg, done, total) {
+  function updateCloneProgress(msg, done, total, fps = null) {
     const pct = total > 0 ? Math.min(100, Math.round((done / total) * 100)) : 0;
     document.getElementById("clone-progress-msg").textContent = msg;
     document.getElementById("clone-progress-pct").textContent = pct + "%";
     document.getElementById("clone-progress-bar").style.width = pct + "%";
+    const radarBadge = document.getElementById("radar-speed-badge");
+    if (radarBadge) {
+      radarBadge.textContent = fps !== null ? `${pct}% • ⚡ ${fps} files/sec` : `${pct}% • Preparing...`;
+    }
   }
 
   // ===========================================================================
@@ -866,21 +878,26 @@ const App = (() => {
       status: "queued",
       pct: 0,
     }));
+    if (!state.isUploading) state.uploadStartTs = performance.now();
     state.uploadQueue.push(...items);
     state.isUploading = true;
     renderUploadQueue(true);
 
-    const uploadPool = DriveEngine.createConcurrencyPool(6);
+    const smallPool = DriveEngine.createConcurrencyPool(25);
+    const largePool = DriveEngine.createConcurrencyPool(6);
     await Promise.all(
-      items.map((item) =>
-        uploadPool(async () => {
+      items.map((item) => {
+        const runner = item.file.size < 4 * 1024 * 1024 ? smallPool : largePool;
+        return runner(async () => {
           item.status = "uploading";
-          renderUploadQueue(true);
+          renderUploadQueue(false);
           try {
-            await DriveEngine.liveUploadFileWithProgress(item.file, "root", state.accessToken, (p) => {
-              item.pct = p;
-              renderUploadQueue(false);
-            });
+            await DriveEngine.withBackoff(() =>
+              DriveEngine.liveUploadFileWithProgress(item.file, "root", state.accessToken, (p) => {
+                item.pct = p;
+                renderUploadQueue(false);
+              })
+            );
             item.status = "done";
             item.pct = 100;
           } catch (err) {
@@ -888,19 +905,20 @@ const App = (() => {
             item.err = err.message || "Upload failed";
             if (String(item.err).includes("401")) handleSessionExpired();
           }
-          renderUploadQueue(true);
-        })
-      )
+          renderUploadQueue(item.status === "error" || state.uploadQueue.every((q) => q.status === "done" || q.status === "error"));
+        });
+      })
     );
 
     state.isUploading = false;
+    renderUploadQueue(true);
     refreshQuotaUI();
     showToast("Upload complete", "Files uploaded directly to your Google Drive.", "success");
   }
 
   function renderUploadQueue(force = true) {
     const now = Date.now();
-    if (!force && now - state.lastUploadRenderTs < 120) return;
+    if (!force && now - state.lastUploadRenderTs < 70) return;
     state.lastUploadRenderTs = now;
     const list = document.getElementById("upload-queue-list");
     const wrap = document.getElementById("upload-progress-wrap");
@@ -917,14 +935,32 @@ const App = (() => {
       return;
     }
     wrap.classList.remove("hidden");
+    const totalCount = state.uploadQueue.length;
     const done = state.uploadQueue.filter((i) => i.status === "done").length;
-    const pct = Math.round((done / state.uploadQueue.length) * 100);
-    document.getElementById("upload-count-text").textContent = `${done}/${state.uploadQueue.length}`;
+
+    let totalBytes = 0;
+    let uploadedBytes = 0;
+    let pctSum = 0;
+    for (const item of state.uploadQueue) {
+      const sz = Number(item.file.size || 0);
+      totalBytes += sz;
+      uploadedBytes += sz * ((item.pct || 0) / 100);
+      pctSum += item.pct || 0;
+    }
+    const pct = totalBytes > 0 ? Math.round((uploadedBytes / totalBytes) * 100) : Math.round(pctSum / totalCount);
+    const elapsedSec = state.uploadStartTs ? Math.max(0.05, (performance.now() - state.uploadStartTs) / 1000) : 0.1;
+    const filesPerSec = (done / elapsedSec).toFixed(done / elapsedSec >= 100 ? 0 : 1);
+    const mbPerSec = (uploadedBytes / (1024 * 1024) / elapsedSec).toFixed(2);
+
+    document.getElementById("upload-count-text").textContent = `${done}/${totalCount} (${pct}%) • ⚡ ${filesPerSec} files/sec • ${mbPerSec} MB/s`;
     document.getElementById("upload-progress-bar").style.width = pct + "%";
 
-    if (done > 0) {
+    if (done < totalCount && state.isUploading) {
+      resTitle.textContent = `Uploading ${pct}%...`;
+      resDesc.textContent = `⚡ ${filesPerSec} files/sec (${mbPerSec} MB/s) • ${done}/${totalCount} files complete`;
+    } else if (done > 0) {
       resTitle.textContent = `${done} File(s) Uploaded!`;
-      resDesc.textContent = "Your files are safely stored in your Google Drive.";
+      resDesc.textContent = `Completed in ${elapsedSec.toFixed(1)}s • ⚡ ${filesPerSec} files/sec (${mbPerSec} MB/s)`;
       mgrBtn.classList.remove("hidden");
     }
 
