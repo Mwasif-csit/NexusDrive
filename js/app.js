@@ -332,7 +332,7 @@ const App = (() => {
     try {
       const about = await DriveEngine.liveVerifyToken(state.accessToken);
       if (about.storageQuota && Number(about.storageQuota.limit) > 0) {
-        document.getElementById("quota-text").textContent = `${DriveEngine.formatBytes(
+        document.getElementById("quota-text").textContent = `💾 Drive: ${DriveEngine.formatBytes(
           Number(about.storageQuota.usage || 0)
         )} / ${DriveEngine.formatBytes(Number(about.storageQuota.limit))}`;
       }

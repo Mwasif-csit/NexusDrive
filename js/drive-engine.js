@@ -650,14 +650,14 @@ const DriveEngine = (() => {
         if (status === 403 || status === 429) sawThrottle = true;
 
         if (isTransient) {
-          if (attempt < 10) {
+          if (attempt < 12) {
             retryBuffer.push({ t, attempt: attempt + 1 });
             queuedRetry = true;
           } else {
             // Never hammer individual /copy endpoints on rate-limit exhaustion
             if (onItemDone) {
               onItemDone(
-                new Error(`Google Drive rate limit (${status}) after 10 retries — wait a moment before retrying.`),
+                new Error(`Google Drive account limit (${status}) after 12 retries — Google limits heavy bursts per account.`),
                 t
               );
             }
