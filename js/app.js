@@ -738,11 +738,12 @@ const App = (() => {
 
       const exactMatchedParentIds = new Set();
       let done = 0;
+      let succeeded = 0;
       let totalEstimated = Math.max(1, plannedFiles);
       let lastProgTs = 0;
       let lastPct = -1;
       let rafPending = false;
-      let latestLabel = "";
+      let activeNotice = "";
 
       const tickProgress = (labelPrefix, force = false) => {
         const now = performance.now();
@@ -751,11 +752,13 @@ const App = (() => {
         lastPct = pct;
         lastProgTs = now;
         const sec = Math.max(0.05, (now - t0) / 1000);
-        const fps = (done / sec).toFixed(done / sec >= 100 ? 0 : 1);
-        latestLabel = `${labelPrefix}: ${done}/${totalEstimated} • ⚡ ${fps} files/sec`;
+        const fps = (succeeded / sec).toFixed(succeeded / sec >= 100 ? 0 : 1);
+        const label = activeNotice
+          ? `${activeNotice} (${done}/${totalEstimated})`
+          : `${labelPrefix}: ${succeeded}/${totalEstimated} • ⚡ ${fps} files/sec`;
         if (force) {
           rafPending = false;
-          updateCloneProgress(latestLabel, done, totalEstimated, fps);
+          updateCloneProgress(label, done, totalEstimated, fps);
           return;
         }
         if (!rafPending) {
@@ -763,22 +766,34 @@ const App = (() => {
           requestAnimationFrame(() => {
             rafPending = false;
             const s = Math.max(0.05, (performance.now() - t0) / 1000);
-            const curFps = (done / s).toFixed(done / s >= 100 ? 0 : 1);
-            updateCloneProgress(`${labelPrefix}: ${done}/${totalEstimated} • ⚡ ${curFps} files/sec`, done, totalEstimated, curFps);
+            const curFps = (succeeded / s).toFixed(succeeded / s >= 100 ? 0 : 1);
+            const rafLabel = activeNotice
+              ? `${activeNotice} (${done}/${totalEstimated})`
+              : `${labelPrefix}: ${succeeded}/${totalEstimated} • ⚡ ${curFps} files/sec`;
+            updateCloneProgress(rafLabel, done, totalEstimated, curFps);
           });
         }
       };
 
       setRadarView("running", "copying");
 
-      // Adaptive AIMD streaming copier with 1.5s throttle cooldown & shared coalesced retry buffer
+      // Adaptive AIMD streaming copier with 1.5s throttle cooldown, escalated quota pauses, & shared coalesced retryBuffer
       const copier = DriveEngine.createStreamingBatchCopier(state.accessToken, {
         batchSize: 5,
         initial: 18,
         min: 3,
         max: 28,
+        onStatus: (msg) => {
+          activeNotice = msg || "";
+          const stagePill = document.getElementById("radar-stage-pill");
+          if (stagePill) {
+            stagePill.textContent = msg ? `QUOTA COOLDOWN: ${msg.toUpperCase()}` : "PROCESSING STAGE: COPYING";
+          }
+          tickProgress("Nexus Cloning", true);
+        },
         onItemDone: (err, t) => {
           if (err) errors.push(`${t.name}: ${err.message || err}`);
+          else succeeded++;
           done++;
           tickProgress("Nexus Cloning", done === totalEstimated);
         },
@@ -849,6 +864,7 @@ const App = (() => {
               await DriveEngine.withBackoff(() =>
                 DriveEngine.liveUploadFileWithProgress(inj.file, inj.parentId, state.accessToken)
               );
+              succeeded++;
             } catch (err) {
               errors.push(`${inj.file.name}: ${err.message || err}`);
             } finally {
@@ -862,18 +878,32 @@ const App = (() => {
       const total = plannedFiles + injectTasks.length;
       const elapsedSecNum = Math.max(0.05, (performance.now() - t0) / 1000);
       const elapsedSec = elapsedSecNum.toFixed(1);
-      const avgFps = (total / elapsedSecNum).toFixed(total / elapsedSecNum >= 100 ? 0 : 1);
-      updateCloneProgress(`Nexus Transfer Complete! • ⚡ ${avgFps} files/sec`, total, Math.max(1, total), avgFps);
+      const avgFps = (succeeded / elapsedSecNum).toFixed(succeeded / elapsedSecNum >= 100 ? 0 : 1);
+      updateCloneProgress(
+        errors.length ? `Finished with Quota Limits • ${succeeded}/${total} copied` : `Nexus Transfer Complete! • ⚡ ${avgFps} files/sec`,
+        total,
+        Math.max(1, total),
+        avgFps
+      );
       setRadarView("done");
-      document.getElementById("radar-done-desc").textContent = `Cloned "${rootFolderName}" (${total} items) in ${elapsedSec}s (⚡ ${avgFps} files/sec)!`;
+      document.getElementById("radar-done-desc").textContent = errors.length
+        ? `Saved ${succeeded}/${total} items in ${elapsedSec}s (${errors.length} hit Google Drive's per-account quota limit — wait a few minutes and retry).`
+        : `Cloned "${rootFolderName}" (${succeeded} items) in ${elapsedSec}s (⚡ ${avgFps} files/sec)!`;
       if (errors.length) {
         errBox.classList.remove("hidden");
-        errBox.innerHTML = errors.map((e) => `<div>• ${Security.escapeHtml(e)}</div>`).join("");
+        errBox.innerHTML = errors.slice(0, 50).map((e) => `<div>• ${Security.escapeHtml(e)}</div>`).join("") +
+          (errors.length > 50 ? `<div>• ...and ${errors.length - 50} more rate-limited items.</div>` : "");
       }
       state.injectedFiles = [];
       renderInjectTags();
       refreshQuotaUI();
-      showToast("Nexus Transfer Complete! 🚀", `${total} items saved in ${elapsedSec}s (${avgFps} files/sec).`, "success");
+      showToast(
+        errors.length ? "Transfer Finished (Quota Limited)" : "Nexus Transfer Complete! 🚀",
+        errors.length
+          ? `${succeeded}/${total} items saved (${errors.length} skipped due to Google account quota).`
+          : `${succeeded} items saved in ${elapsedSec}s (${avgFps} files/sec).`,
+        errors.length ? "error" : "success"
+      );
     } catch (err) {
       setRadarView("idle");
       const msg = err.message || String(err);

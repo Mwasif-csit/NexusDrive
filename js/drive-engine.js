@@ -109,6 +109,7 @@ const DriveEngine = (() => {
     let active = 0;
     let paceMs = 0;
     let cleanStreak = 0;
+    let zeroStreak = 0;
     let lastThrottleAt = 0;
     let pauseUntil = 0;
     let drainTimer = null;
@@ -153,6 +154,7 @@ const DriveEngine = (() => {
       });
 
     enqueue.onSuccess = () => {
+      zeroStreak = 0;
       cleanStreak += 1;
       if (cleanStreak >= 3) {
         cleanStreak = 0;
@@ -163,13 +165,21 @@ const DriveEngine = (() => {
 
     enqueue.onThrottle = (severe = false) => {
       const now = Date.now();
-      if (now - lastThrottleAt < 1500) return;
+      if (now - lastThrottleAt < 1500) return 0;
       lastThrottleAt = now;
       cleanStreak = 0;
       limit = Math.max(min, Math.round(limit * (severe ? 0.65 : 0.85)));
       paceMs = Math.min(250, paceMs + (severe ? 60 : 20));
-      if (severe) pauseUntil = Math.max(pauseUntil, now + 1200);
+      if (severe) {
+        zeroStreak += 1;
+        const coolMs = Math.min(18000, 3000 * Math.pow(2, Math.min(3, zeroStreak - 1)));
+        pauseUntil = Math.max(pauseUntil, now + coolMs);
+        return coolMs;
+      }
+      return 0;
     };
+
+    enqueue.getPauseRemainingMs = () => Math.max(0, pauseUntil - Date.now());
 
     return enqueue;
   }
@@ -589,12 +599,13 @@ const DriveEngine = (() => {
    * - Sustained sweet-spot concurrency (18..28 streams × 5-item batches) + 1.5s throttle epoch cooldown
    * - Coalesces failed retry items into a shared retryBuffer so retries fire in full batches instead of 1-item fragments
    */
-  function createStreamingBatchCopier(accessToken, { batchSize = 5, initial = 18, min = 3, max = 28, onItemDone } = {}) {
+  function createStreamingBatchCopier(accessToken, { batchSize = 5, initial = 18, min = 3, max = 28, onItemDone, onStatus } = {}) {
     const batchPool = createAdaptivePool({ initial, min, max });
     const fallbackPool = createConcurrencyPool(20);
     let buffer = [];
     const retryBuffer = [];
     const inflight = [];
+    let inCooldown = false;
 
     async function executeAndHandleChunk(entries) {
       const reqs = entries.map(({ t }) => {
@@ -656,8 +667,19 @@ const DriveEngine = (() => {
         }
       });
 
-      if (sawThrottle) batchPool.onThrottle(successCount === 0);
-      else batchPool.onSuccess();
+      if (sawThrottle) {
+        const coolMs = batchPool.onThrottle(successCount === 0);
+        if (coolMs >= 3000 && onStatus) {
+          inCooldown = true;
+          onStatus(`Google quota cooldown (${Math.round(coolMs / 1000)}s) — auto-resuming`);
+        }
+      } else {
+        batchPool.onSuccess();
+        if (inCooldown && onStatus) {
+          inCooldown = false;
+          onStatus("");
+        }
+      }
 
       // Coalesce retried items across all batches into full batchSize HTTP calls
       if (queuedRetry) {
@@ -687,7 +709,9 @@ const DriveEngine = (() => {
     function dispatchRetrySlice(slice) {
       if (!slice.length) return;
       const maxAtt = Math.max(...slice.map((s) => s.attempt));
-      const waitMs = Math.min(2500, 180 * Math.pow(1.4, Math.max(0, maxAtt - 1)) + Math.random() * 120);
+      const poolCool = batchPool.getPauseRemainingMs();
+      const baseWait = 250 * Math.pow(1.45, Math.max(0, maxAtt - 1)) + Math.random() * 140;
+      const waitMs = Math.max(poolCool, Math.min(8000, baseWait));
       inflight.push(
         new Promise((resolve) => setTimeout(resolve, waitMs)).then(() => executeAndHandleChunk(slice))
       );
