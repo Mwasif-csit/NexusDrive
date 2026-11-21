@@ -460,12 +460,13 @@ const DriveEngine = (() => {
   async function liveBatchCreateFolders(specs, accessToken) {
     if (!specs.length) return [];
     const results = new Array(specs.length);
+    // Small batches of 4 across 20 parallel HTTP/2 streams avoid Google's per-batch serialization tail latency
     const chunks = chunkArray(
       specs.map((s, idx) => ({ ...s, idx })),
-      50
+      4
     );
-    const batchPool = createConcurrencyPool(6);
-    const fallbackPool = createConcurrencyPool(20);
+    const batchPool = createConcurrencyPool(20);
+    const fallbackPool = createConcurrencyPool(25);
 
     await Promise.all(
       chunks.map((chunk) =>
@@ -508,61 +509,129 @@ const DriveEngine = (() => {
     return results;
   }
 
+  /**
+   * High-throughput streaming Google Drive batch copier:
+   * - Sends small 4-item batches across 40 parallel HTTP/2 streams (~1.5-2s per batch, avoiding 18s batch tail stalls)
+   * - Re-batches rate-limited (403/429) items inside /batch/drive/v3 so zero CORS OPTIONS overhead occurs
+   */
+  function createStreamingBatchCopier(accessToken, { batchSize = 4, concurrency = 40, onItemDone } = {}) {
+    const batchPool = createConcurrencyPool(concurrency);
+    const fallbackPool = createConcurrencyPool(20);
+    let buffer = [];
+    const inflight = [];
+
+    async function runBatchWithRebatch(chunk, attempt = 0) {
+      const reqs = chunk.map((t) => {
+        const body = { name: Security.sanitizeName(t.name) };
+        if (t.parentId && t.parentId !== "root") body.parents = [t.parentId];
+        return {
+          method: "POST",
+          path: `/drive/v3/files/${encodeURIComponent(t.sourceId)}/copy?supportsAllDrives=true&fields=id`,
+          body,
+        };
+      });
+
+      let batchRes = null;
+      try {
+        batchRes = await withBackoff(() => executeDriveBatch(reqs, accessToken));
+      } catch {
+        batchRes = null;
+      }
+
+      const rateLimitRetry = [];
+      const fallbackNeeded = [];
+
+      chunk.forEach((t, idx) => {
+        const r = batchRes && batchRes[idx];
+        if (r && r.status >= 200 && r.status < 300 && r.body && r.body.id) {
+          if (onItemDone) onItemDone(null, t);
+          return;
+        }
+        const status = r ? r.status : 500;
+        const bodyTxt = r ? r.raw || JSON.stringify(r.body || {}) : "";
+        const isTransient =
+          !r ||
+          status === 429 ||
+          status >= 500 ||
+          (status === 403 &&
+            /rateLimitExceeded|userRateLimitExceeded|sharingRateLimitExceeded|quotaExceeded|usageLimits|backendError/i.test(bodyTxt));
+
+        if (isTransient && attempt < 5) {
+          rateLimitRetry.push(t);
+        } else {
+          fallbackNeeded.push(t);
+        }
+      });
+
+      const subPromises = [];
+      if (rateLimitRetry.length) {
+        const waitMs = 180 * Math.pow(1.7, attempt) + Math.random() * 140;
+        subPromises.push(
+          new Promise((resolve) => setTimeout(resolve, waitMs)).then(() =>
+            Promise.all(
+              chunkArray(rateLimitRetry, batchSize).map((subChunk) =>
+                batchPool(() => runBatchWithRebatch(subChunk, attempt + 1))
+              )
+            )
+          )
+        );
+      }
+      if (fallbackNeeded.length) {
+        subPromises.push(
+          Promise.all(
+            fallbackNeeded.map((t) =>
+              fallbackPool(async () => {
+                try {
+                  await withBackoff(() =>
+                    liveCopyFileWithFallback(t.sourceId, t.name, t.parentId, t.mimeType, accessToken)
+                  );
+                  if (onItemDone) onItemDone(null, t);
+                } catch (err) {
+                  if (onItemDone) onItemDone(err, t);
+                }
+              })
+            )
+          )
+        );
+      }
+      if (subPromises.length) await Promise.all(subPromises);
+    }
+
+    function dispatchChunk(chunk) {
+      if (!chunk.length) return;
+      inflight.push(batchPool(() => runBatchWithRebatch(chunk, 0)));
+    }
+
+    return {
+      push(tasks) {
+        if (!tasks || !tasks.length) return;
+        for (const t of tasks) {
+          buffer.push(t);
+          if (buffer.length >= batchSize) {
+            dispatchChunk(buffer);
+            buffer = [];
+          }
+        }
+      },
+      async flush() {
+        if (buffer.length) {
+          dispatchChunk(buffer);
+          buffer = [];
+        }
+        // Snapshot length loop so any pushed tasks during waits are also awaited
+        while (inflight.length) {
+          const batch = inflight.splice(0, inflight.length);
+          await Promise.all(batch);
+        }
+      },
+    };
+  }
+
   async function liveBatchCopyFiles(tasks, accessToken, onItemDone) {
     if (!tasks.length) return;
-    // Adaptive micro-batches (~10 chunks for >=15 files) give smooth 10%, 20%, 30%... progress bars while keeping high HTTP/2 batch throughput
-    const chunkSize =
-      tasks.length <= 15
-        ? Math.max(1, Math.ceil(tasks.length / 5))
-        : Math.min(50, Math.max(5, Math.ceil(tasks.length / 10)));
-    const chunks = chunkArray(tasks, chunkSize);
-    const batchPool = createConcurrencyPool(8);
-    const retryPool = createConcurrencyPool(25);
-
-    await Promise.all(
-      chunks.map((chunk) =>
-        batchPool(async () => {
-          const reqs = chunk.map((t) => {
-            const body = { name: Security.sanitizeName(t.name) };
-            if (t.parentId && t.parentId !== "root") body.parents = [t.parentId];
-            return {
-              method: "POST",
-              path: `/drive/v3/files/${encodeURIComponent(t.sourceId)}/copy?supportsAllDrives=true&fields=id`,
-              body,
-            };
-          });
-
-          let batchRes = null;
-          try {
-            batchRes = await withBackoff(() => executeDriveBatch(reqs, accessToken));
-          } catch {
-            batchRes = null;
-          }
-
-          const retries = [];
-          chunk.forEach((t, idx) => {
-            const r = batchRes && batchRes[idx];
-            if (r && r.status >= 200 && r.status < 300 && r.body && r.body.id) {
-              if (onItemDone) onItemDone(null, t);
-            } else {
-              retries.push(
-                retryPool(async () => {
-                  try {
-                    await withBackoff(() =>
-                      liveCopyFileWithFallback(t.sourceId, t.name, t.parentId, t.mimeType, accessToken)
-                    );
-                    if (onItemDone) onItemDone(null, t);
-                  } catch (err) {
-                    if (onItemDone) onItemDone(err, t);
-                  }
-                })
-              );
-            }
-          });
-          if (retries.length) await Promise.all(retries);
-        })
-      )
-    );
+    const copier = createStreamingBatchCopier(accessToken, { batchSize: 4, concurrency: 40, onItemDone });
+    copier.push(tasks);
+    await copier.flush();
   }
 
   async function liveDeleteFiles(fileIds, accessToken) {
@@ -615,8 +684,8 @@ const DriveEngine = (() => {
   }
 
   async function liveScanTree(rootId, accessToken, filters, onProgress) {
-    const fallbackPool = createConcurrencyPool(30);
-    const batchPool = createConcurrencyPool(3);
+    const fallbackPool = createConcurrencyPool(35);
+    const batchPool = createConcurrencyPool(20);
     const stats = { totalFiles: 0, totalFolders: 0, totalBytes: 0, filteredOut: 0 };
     const meta = await withBackoff(() => liveGetMeta(rootId, accessToken));
 
@@ -660,7 +729,7 @@ const DriveEngine = (() => {
         onProgress(`Scanning: ${stats.totalFiles} files • ${stats.totalFolders} folders...`);
       }
 
-      const chunks = chunkArray(currentLevel, 50);
+      const chunks = chunkArray(currentLevel, 5);
       const nextLevel = [];
 
       await Promise.all(
@@ -761,6 +830,7 @@ const DriveEngine = (() => {
     liveScanTree,
     liveCreateFolder,
     liveBatchCreateFolders,
+    createStreamingBatchCopier,
     liveBatchCopyFiles,
     liveCopyFileWithFallback,
     liveUploadFileWithProgress,

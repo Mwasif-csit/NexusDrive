@@ -706,25 +706,37 @@ const App = (() => {
       const customName = document.getElementById("clone-dest-name").value.trim();
       const rootFolderName = customName || root.name;
 
-      // Count planned file copies upfront for instant pipelined progress
+      // Compute active folders (selected directly OR containing any selected descendant) & exact planned file count
+      const activeFolderIds = new Set();
       let plannedFiles = 0;
-      const countSelected = (n) => {
-        for (const ch of n.children || []) {
-          const norm = DriveEngine.normalizeText(ch.name);
-          const isEx = ch.kind === "file" && exactList.some((ex) => norm.includes(ex));
-          if (isEx || !state.selectedMap[ch.id]) continue;
-          if (ch.kind === "file") plannedFiles++;
-          else countSelected(ch);
+      const analyzeSelection = (n) => {
+        if (n.kind !== "folder") {
+          const norm = DriveEngine.normalizeText(n.name);
+          const isEx = exactList.some((ex) => norm.includes(ex));
+          if (isEx) return true; // Exact-replaced files trigger ancestor creation for injection targeting
+          if (state.selectedMap[n.id]) {
+            plannedFiles++;
+            return true;
+          }
+          return false;
         }
+        let hasActiveChild = false;
+        for (const ch of n.children || []) {
+          if (analyzeSelection(ch)) hasActiveChild = true;
+        }
+        if (state.selectedMap[n.id] || hasActiveChild) {
+          activeFolderIds.add(n.id);
+          return true;
+        }
+        return false;
       };
-      countSelected(root);
+      analyzeSelection(root);
 
       const createdRoot = await DriveEngine.withBackoff(() =>
         DriveEngine.liveCreateFolder(rootFolderName, "root", state.accessToken)
       );
 
       const exactMatchedParentIds = new Set();
-      const pendingCopyBatches = [];
       let done = 0;
       let totalEstimated = Math.max(1, plannedFiles);
       let lastProgTs = 0;
@@ -743,7 +755,17 @@ const App = (() => {
 
       setRadarView("running", "copying");
 
-      // BFS level-by-level batching: 1 HTTP batch creates up to 50 folders AND streams files into 50-file batch copy!
+      // Cross-level continuous streaming copier: 4-item micro-batches across 40 parallel HTTP/2 streams
+      const copier = DriveEngine.createStreamingBatchCopier(state.accessToken, {
+        batchSize: 4,
+        concurrency: 40,
+        onItemDone: (err, t) => {
+          if (err) errors.push(`${t.name}: ${err.message || err}`);
+          done++;
+          tickProgress("Nexus Cloning", done === totalEstimated);
+        },
+      });
+
       let currentLevel = [{ node: root, parentId: createdRoot.id }];
       while (currentLevel.length > 0) {
         const levelCopyTasks = [];
@@ -757,28 +779,22 @@ const App = (() => {
               exactMatchedParentIds.add(entry.parentId);
               continue;
             }
-            if (!state.selectedMap[ch.id]) continue;
             if (ch.kind === "file") {
+              if (!state.selectedMap[ch.id]) continue;
               levelCopyTasks.push({
                 sourceId: ch.shortcutTargetId || ch.id,
                 name: ch.name,
                 mimeType: ch.mimeType,
                 parentId: entry.parentId,
               });
-            } else {
+            } else if (activeFolderIds.has(ch.id)) {
               levelSubSpecs.push({ name: ch.name, parentId: entry.parentId, node: ch });
             }
           }
         }
 
         if (levelCopyTasks.length > 0) {
-          pendingCopyBatches.push(
-            DriveEngine.liveBatchCopyFiles(levelCopyTasks, state.accessToken, (err, t) => {
-              if (err) errors.push(`${t.name}: ${err.message || err}`);
-              done++;
-              tickProgress("Nexus Cloning", done === totalEstimated);
-            })
-          );
+          copier.push(levelCopyTasks);
         }
 
         if (levelSubSpecs.length > 0) {
@@ -808,7 +824,7 @@ const App = (() => {
 
       const injectPool = DriveEngine.createConcurrencyPool(10);
       await Promise.all([
-        ...pendingCopyBatches,
+        copier.flush(),
         ...injectTasks.map((inj) =>
           injectPool(async () => {
             try {
