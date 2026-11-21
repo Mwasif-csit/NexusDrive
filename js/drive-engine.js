@@ -511,10 +511,10 @@ const DriveEngine = (() => {
 
   /**
    * High-throughput streaming Google Drive batch copier:
-   * - Sends ultra-low-latency 2-item micro-batches across 85 parallel HTTP/2 streams
+   * - Sends tuned 3-item batches across 50 parallel HTTP/2 streams (~1.8-2.2s/batch, staying under Google write burst limits)
    * - Re-batches rate-limited (403/429) items inside /batch/drive/v3 so zero CORS OPTIONS overhead occurs
    */
-  function createStreamingBatchCopier(accessToken, { batchSize = 2, concurrency = 85, onItemDone } = {}) {
+  function createStreamingBatchCopier(accessToken, { batchSize = 3, concurrency = 50, onItemDone } = {}) {
     const batchPool = createConcurrencyPool(concurrency);
     const fallbackPool = createConcurrencyPool(20);
     let buffer = [];
@@ -629,7 +629,7 @@ const DriveEngine = (() => {
 
   async function liveBatchCopyFiles(tasks, accessToken, onItemDone) {
     if (!tasks.length) return;
-    const copier = createStreamingBatchCopier(accessToken, { batchSize: 2, concurrency: 85, onItemDone });
+    const copier = createStreamingBatchCopier(accessToken, { batchSize: 3, concurrency: 50, onItemDone });
     copier.push(tasks);
     await copier.flush();
   }

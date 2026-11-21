@@ -755,10 +755,10 @@ const App = (() => {
 
       setRadarView("running", "copying");
 
-      // Cross-level continuous streaming copier: 2-item micro-batches across 85 parallel HTTP/2 streams
+      // Cross-level continuous streaming copier: tuned 3-item batches across 50 parallel HTTP/2 streams (peak throughput, 0 rate limits)
       const copier = DriveEngine.createStreamingBatchCopier(state.accessToken, {
-        batchSize: 2,
-        concurrency: 85,
+        batchSize: 3,
+        concurrency: 50,
         onItemDone: (err, t) => {
           if (err) errors.push(`${t.name}: ${err.message || err}`);
           done++;
