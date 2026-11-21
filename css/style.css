@@ -503,3 +503,17 @@ input:focus { border-color: var(--blue); }
   .mobile-pill-bar { display: flex; }
   .pipe-connector { display: none; }
 }
+
+@media (max-width: 640px) {
+  .container { padding: 0 14px; }
+  .nav-inner { height: auto; min-height: 58px; padding: 8px 0; gap: 8px; }
+  .brand-mark { width: 32px; height: 32px; font-size: 16px; }
+  .brand-name { font-size: 15px; }
+  .brand-by { font-size: 9px; }
+  .nav-links { gap: 4px; }
+  .nav-links .nav-link { padding: 5px 8px; font-size: 11px; }
+  .nav-links .btn { padding: 6px 10px; font-size: 11px; }
+  #view-landing .nav-links .nav-link:first-child { display: none; }
+  .hero { padding: 40px 14px 32px; }
+  .input-with-btn { flex-direction: column; }
+}
