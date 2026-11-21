@@ -104,11 +104,12 @@ const DriveEngine = (() => {
    * - Starts below burst cliffs, ramps up cleanly on 200 streaks, and throttles down smoothly on 403/429
    *   so huge 1,500+ file transfers sustain maximum speed without stop-and-go pauses.
    */
-  function createAdaptivePool({ initial = 22, min = 8, max = 44 } = {}) {
+  function createAdaptivePool({ initial = 18, min = 12, max = 28 } = {}) {
     let limit = Math.max(min, Math.min(max, initial));
     let active = 0;
     let paceMs = 0;
     let cleanStreak = 0;
+    let lastThrottleAt = 0;
     const queue = [];
 
     const drain = () => {
@@ -138,17 +139,21 @@ const DriveEngine = (() => {
 
     enqueue.onSuccess = () => {
       cleanStreak += 1;
-      if (cleanStreak >= 4) {
+      if (cleanStreak >= 3) {
         cleanStreak = 0;
         limit = Math.min(max, limit + 1);
-        paceMs = Math.max(0, paceMs - 15);
+        paceMs = Math.max(0, paceMs - 10);
       }
     };
 
     enqueue.onThrottle = () => {
+      const now = Date.now();
+      // 1.5s epoch cooldown prevents 20-40 in-flight 403s from collapsing limit straight to min in one wave
+      if (now - lastThrottleAt < 1500) return;
+      lastThrottleAt = now;
       cleanStreak = 0;
-      limit = Math.max(min, limit * 0.72);
-      paceMs = Math.min(180, Math.max(35, paceMs + 35));
+      limit = Math.max(min, Math.round(limit * 0.85));
+      paceMs = Math.min(60, paceMs + 15);
     };
 
     return enqueue;
@@ -566,17 +571,18 @@ const DriveEngine = (() => {
 
   /**
    * Adaptive AIMD streaming Google Drive batch copier:
-   * - Starts at 22 concurrent 4-item batches, scales up to 44 streams on clean 200s, and smoothly backs off on 403/429
-   * - Priority re-batches transient rate-limited items inside /batch/drive/v3 so transfers never freeze or lose speed
+   * - Sustained sweet-spot concurrency (18..28 streams × 5-item batches) + 1.5s throttle epoch cooldown
+   * - Coalesces failed retry items into a shared retryBuffer so retries fire in full batches instead of 1-item fragments
    */
-  function createStreamingBatchCopier(accessToken, { batchSize = 4, initial = 22, min = 8, max = 44, onItemDone } = {}) {
+  function createStreamingBatchCopier(accessToken, { batchSize = 5, initial = 18, min = 12, max = 28, onItemDone } = {}) {
     const batchPool = createAdaptivePool({ initial, min, max });
     const fallbackPool = createConcurrencyPool(20);
     let buffer = [];
+    const retryBuffer = [];
     const inflight = [];
 
-    async function runBatchWithRebatch(chunk, attempt = 0) {
-      const reqs = chunk.map((t) => {
+    async function executeAndHandleChunk(entries) {
+      const reqs = entries.map(({ t }) => {
         const body = { name: Security.sanitizeName(t.name) };
         if (t.parentId && t.parentId !== "root") body.parents = [t.parentId];
         return {
@@ -586,19 +592,19 @@ const DriveEngine = (() => {
         };
       });
 
-      // Acquire adaptive batchPool ONLY for the HTTP roundtrip so retries never self-deadlock the pool!
+      const isRetry = entries.some((e) => e.attempt > 0);
       let batchRes = null;
       try {
-        batchRes = await batchPool(() => executeDriveBatch(reqs, accessToken), attempt > 0);
+        batchRes = await batchPool(() => executeDriveBatch(reqs, accessToken), isRetry);
       } catch {
         batchRes = null;
       }
 
-      const rateLimitRetry = [];
       const fallbackNeeded = [];
       let sawThrottle = batchRes === null;
+      let queuedRetry = false;
 
-      chunk.forEach((t, idx) => {
+      entries.forEach(({ t, attempt }, idx) => {
         const r = batchRes && batchRes[idx];
         if (r && r.status >= 200 && r.status < 300 && r.body && r.body.id) {
           if (onItemDone) onItemDone(null, t);
@@ -616,7 +622,8 @@ const DriveEngine = (() => {
         if (status === 403 || status === 429) sawThrottle = true;
 
         if (isTransient && attempt < 8) {
-          rateLimitRetry.push(t);
+          retryBuffer.push({ t, attempt: attempt + 1 });
+          queuedRetry = true;
         } else {
           fallbackNeeded.push(t);
         }
@@ -625,43 +632,43 @@ const DriveEngine = (() => {
       if (sawThrottle) batchPool.onThrottle();
       else batchPool.onSuccess();
 
-      const subPromises = [];
-      if (rateLimitRetry.length) {
-        const waitMs = 160 * Math.pow(1.45, attempt) + Math.random() * 120;
-        subPromises.push(
-          new Promise((resolve) => setTimeout(resolve, waitMs)).then(() =>
-            Promise.all(
-              chunkArray(rateLimitRetry, batchSize).map((subChunk) =>
-                runBatchWithRebatch(subChunk, attempt + 1)
-              )
-            )
-          )
-        );
+      // Coalesce retried items across all batches into full batchSize HTTP calls
+      if (queuedRetry) {
+        while (retryBuffer.length >= batchSize) {
+          dispatchRetrySlice(retryBuffer.splice(0, batchSize));
+        }
       }
+
       if (fallbackNeeded.length) {
-        subPromises.push(
-          Promise.all(
-            fallbackNeeded.map((t) =>
-              fallbackPool(async () => {
-                try {
-                  await withBackoff(() =>
-                    liveCopyFileWithFallback(t.sourceId, t.name, t.parentId, t.mimeType, accessToken)
-                  );
-                  if (onItemDone) onItemDone(null, t);
-                } catch (err) {
-                  if (onItemDone) onItemDone(err, t);
-                }
-              })
-            )
+        await Promise.all(
+          fallbackNeeded.map((t) =>
+            fallbackPool(async () => {
+              try {
+                await withBackoff(() =>
+                  liveCopyFileWithFallback(t.sourceId, t.name, t.parentId, t.mimeType, accessToken)
+                );
+                if (onItemDone) onItemDone(null, t);
+              } catch (err) {
+                if (onItemDone) onItemDone(err, t);
+              }
+            })
           )
         );
       }
-      if (subPromises.length) await Promise.all(subPromises);
+    }
+
+    function dispatchRetrySlice(slice) {
+      if (!slice.length) return;
+      const maxAtt = Math.max(...slice.map((s) => s.attempt));
+      const waitMs = Math.min(2500, 180 * Math.pow(1.4, Math.max(0, maxAtt - 1)) + Math.random() * 120);
+      inflight.push(
+        new Promise((resolve) => setTimeout(resolve, waitMs)).then(() => executeAndHandleChunk(slice))
+      );
     }
 
     function dispatchChunk(chunk) {
       if (!chunk.length) return;
-      inflight.push(runBatchWithRebatch(chunk, 0));
+      inflight.push(executeAndHandleChunk(chunk.map((t) => ({ t, attempt: 0 }))));
     }
 
     return {
@@ -680,9 +687,19 @@ const DriveEngine = (() => {
           dispatchChunk(buffer);
           buffer = [];
         }
-        while (inflight.length) {
-          const batch = inflight.splice(0, inflight.length);
-          await Promise.all(batch);
+        while (inflight.length || retryBuffer.length) {
+          if (inflight.length) {
+            const batch = inflight.splice(0, inflight.length);
+            await Promise.all(batch);
+          }
+          if (retryBuffer.length) {
+            while (retryBuffer.length >= batchSize) {
+              dispatchRetrySlice(retryBuffer.splice(0, batchSize));
+            }
+            if (!inflight.length && retryBuffer.length) {
+              dispatchRetrySlice(retryBuffer.splice(0, retryBuffer.length));
+            }
+          }
         }
       },
     };
@@ -690,7 +707,7 @@ const DriveEngine = (() => {
 
   async function liveBatchCopyFiles(tasks, accessToken, onItemDone) {
     if (!tasks.length) return;
-    const copier = createStreamingBatchCopier(accessToken, { batchSize: 4, initial: 22, min: 8, max: 44, onItemDone });
+    const copier = createStreamingBatchCopier(accessToken, { batchSize: 5, initial: 18, min: 12, max: 28, onItemDone });
     copier.push(tasks);
     await copier.flush();
   }

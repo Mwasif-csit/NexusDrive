@@ -771,12 +771,12 @@ const App = (() => {
 
       setRadarView("running", "copying");
 
-      // Adaptive AIMD streaming copier: prevents burst 403 cliffs & maintains smooth continuous throughput
+      // Adaptive AIMD streaming copier with 1.5s throttle cooldown & shared coalesced retry buffer
       const copier = DriveEngine.createStreamingBatchCopier(state.accessToken, {
-        batchSize: 4,
-        initial: 22,
-        min: 8,
-        max: 44,
+        batchSize: 5,
+        initial: 18,
+        min: 12,
+        max: 28,
         onItemDone: (err, t) => {
           if (err) errors.push(`${t.name}: ${err.message || err}`);
           done++;
