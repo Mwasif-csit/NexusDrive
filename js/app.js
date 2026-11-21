@@ -215,6 +215,7 @@ const App = (() => {
     const emailLbl = document.getElementById("conn-email-label");
     const subLbl = document.getElementById("conn-sub-label");
     const btnConn = document.getElementById("btn-connect-drive");
+    const btnDemo = document.getElementById("btn-demo-drive");
     const btnDisc = document.getElementById("btn-disconnect-drive");
     const quotaPill = document.getElementById("quota-pill");
 
@@ -224,6 +225,7 @@ const App = (() => {
       emailLbl.style.color = "var(--emerald)";
       subLbl.textContent = "Ready to receive cloned & uploaded files directly.";
       btnConn.classList.add("hidden");
+      if (btnDemo) btnDemo.classList.add("hidden");
       btnDisc.classList.remove("hidden");
       quotaPill.classList.remove("hidden");
       refreshQuotaUI();
@@ -233,6 +235,7 @@ const App = (() => {
       emailLbl.style.color = "#f59e0b";
       subLbl.textContent = "Connect the Google Drive account where you want files saved.";
       btnConn.classList.remove("hidden");
+      if (btnDemo) btnDemo.classList.remove("hidden");
       btnDisc.classList.add("hidden");
       quotaPill.classList.add("hidden");
     }
