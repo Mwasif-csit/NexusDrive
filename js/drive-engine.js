@@ -137,7 +137,19 @@ const DriveEngine = (() => {
       { headers: { Authorization: "Bearer " + accessToken } }
     );
     if (!res.ok) {
-      throw new Error(`Drive authorization invalid [${res.status}]. Please reconnect Google Drive.`);
+      const txt = await res.text();
+      const parsed = parseApiError(txt, res.status);
+      if (res.status === 403 && /has not been used in project|is disabled|accessNotConfigured/i.test(txt)) {
+        throw new Error(
+          `Drive API Disabled [403]: Enable "Google Drive API" in Google Cloud Console (APIs & Services -> Library).`
+        );
+      }
+      if (res.status === 403 && /insufficient/i.test(txt)) {
+        throw new Error(
+          `Permission Missing [403]: Tick the Google Drive access checkbox on Google's consent screen and try again.`
+        );
+      }
+      throw new Error(`Drive authorization invalid ${parsed}`);
     }
     return await res.json();
   }

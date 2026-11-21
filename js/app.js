@@ -108,7 +108,7 @@ const App = (() => {
       desc ? `<div class="toast-desc">${Security.escapeHtml(desc)}</div>` : ""
     }`;
     box.appendChild(el);
-    setTimeout(() => el.remove(), 4500);
+    setTimeout(() => el.remove(), type === "error" ? 8000 : 4500);
   }
 
   // ===========================================================================
@@ -360,6 +360,17 @@ const App = (() => {
         callback: async (resp) => {
           if (resp.error || !resp.access_token) {
             handleOAuthError(resp.error || "No access token returned by Google.");
+            return;
+          }
+          if (
+            window.google.accounts.oauth2.hasGrantedAllScopes &&
+            !window.google.accounts.oauth2.hasGrantedAllScopes(resp, "https://www.googleapis.com/auth/drive")
+          ) {
+            showToast(
+              "Drive Permission Not Checked",
+              "On Google's screen, make sure you tick the checkbox for Google Drive access before clicking Continue.",
+              "error"
+            );
             return;
           }
           try {
