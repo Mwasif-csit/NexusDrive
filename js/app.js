@@ -741,24 +741,42 @@ const App = (() => {
       let totalEstimated = Math.max(1, plannedFiles);
       let lastProgTs = 0;
       let lastPct = -1;
+      let rafPending = false;
+      let latestLabel = "";
 
       const tickProgress = (labelPrefix, force = false) => {
         const now = performance.now();
         const pct = Math.min(100, Math.round((done / totalEstimated) * 100));
-        if (!force && pct === lastPct && now - lastProgTs < 80) return;
+        if (!force && pct === lastPct && now - lastProgTs < 100) return;
         lastPct = pct;
         lastProgTs = now;
         const sec = Math.max(0.05, (now - t0) / 1000);
         const fps = (done / sec).toFixed(done / sec >= 100 ? 0 : 1);
-        updateCloneProgress(`${labelPrefix}: ${done}/${totalEstimated} • ⚡ ${fps} files/sec`, done, totalEstimated, fps);
+        latestLabel = `${labelPrefix}: ${done}/${totalEstimated} • ⚡ ${fps} files/sec`;
+        if (force) {
+          rafPending = false;
+          updateCloneProgress(latestLabel, done, totalEstimated, fps);
+          return;
+        }
+        if (!rafPending) {
+          rafPending = true;
+          requestAnimationFrame(() => {
+            rafPending = false;
+            const s = Math.max(0.05, (performance.now() - t0) / 1000);
+            const curFps = (done / s).toFixed(done / s >= 100 ? 0 : 1);
+            updateCloneProgress(`${labelPrefix}: ${done}/${totalEstimated} • ⚡ ${curFps} files/sec`, done, totalEstimated, curFps);
+          });
+        }
       };
 
       setRadarView("running", "copying");
 
-      // Cross-level continuous streaming copier: empirically tuned 4-item batches across 40 parallel HTTP/2 streams (0 rate limits)
+      // Adaptive AIMD streaming copier: prevents burst 403 cliffs & maintains smooth continuous throughput
       const copier = DriveEngine.createStreamingBatchCopier(state.accessToken, {
         batchSize: 4,
-        concurrency: 40,
+        initial: 22,
+        min: 8,
+        max: 44,
         onItemDone: (err, t) => {
           if (err) errors.push(`${t.name}: ${err.message || err}`);
           done++;

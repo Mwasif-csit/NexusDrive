@@ -99,6 +99,61 @@ const DriveEngine = (() => {
       });
   }
 
+  /**
+   * Adaptive AIMD Concurrency Pool:
+   * - Starts below burst cliffs, ramps up cleanly on 200 streaks, and throttles down smoothly on 403/429
+   *   so huge 1,500+ file transfers sustain maximum speed without stop-and-go pauses.
+   */
+  function createAdaptivePool({ initial = 22, min = 8, max = 44 } = {}) {
+    let limit = Math.max(min, Math.min(max, initial));
+    let active = 0;
+    let paceMs = 0;
+    let cleanStreak = 0;
+    const queue = [];
+
+    const drain = () => {
+      while (active < Math.floor(limit) && queue.length > 0) {
+        const entry = queue.shift();
+        active += 1;
+        const runTask = () =>
+          entry.task()
+            .then(entry.resolve)
+            .catch(entry.reject)
+            .finally(() => {
+              active -= 1;
+              drain();
+            });
+        if (paceMs > 0) setTimeout(runTask, Math.round(Math.random() * paceMs));
+        else runTask();
+      }
+    };
+
+    const enqueue = (task, priority = false) =>
+      new Promise((resolve, reject) => {
+        const entry = { task, resolve, reject };
+        if (priority) queue.unshift(entry);
+        else queue.push(entry);
+        drain();
+      });
+
+    enqueue.onSuccess = () => {
+      cleanStreak += 1;
+      if (cleanStreak >= 4) {
+        cleanStreak = 0;
+        limit = Math.min(max, limit + 1);
+        paceMs = Math.max(0, paceMs - 15);
+      }
+    };
+
+    enqueue.onThrottle = () => {
+      cleanStreak = 0;
+      limit = Math.max(min, limit * 0.72);
+      paceMs = Math.min(180, Math.max(35, paceMs + 35));
+    };
+
+    return enqueue;
+  }
+
   async function withBackoff(op, maxRetries = 8) {
     let lastErr;
     for (let i = 0; i < maxRetries; i++) {
@@ -460,12 +515,13 @@ const DriveEngine = (() => {
   async function liveBatchCreateFolders(specs, accessToken) {
     if (!specs.length) return [];
     const results = new Array(specs.length);
+    // 8 folders/batch slashes per-level roundtrips across deep course trees
     const chunks = chunkArray(
       specs.map((s, idx) => ({ ...s, idx })),
-      2
+      8
     );
-    const batchPool = createConcurrencyPool(40);
-    const fallbackPool = createConcurrencyPool(30);
+    const batchPool = createConcurrencyPool(20);
+    const fallbackPool = createConcurrencyPool(25);
 
     await Promise.all(
       chunks.map((chunk) =>
@@ -509,12 +565,12 @@ const DriveEngine = (() => {
   }
 
   /**
-   * High-throughput streaming Google Drive batch copier:
-   * - Empirically tuned to 4-item batches across 40 parallel HTTP/2 streams (peak ~30+ files/sec with 0 rate-limit stalls)
-   * - Re-batches rate-limited (403/429) items inside /batch/drive/v3 so zero CORS OPTIONS overhead occurs
+   * Adaptive AIMD streaming Google Drive batch copier:
+   * - Starts at 22 concurrent 4-item batches, scales up to 44 streams on clean 200s, and smoothly backs off on 403/429
+   * - Priority re-batches transient rate-limited items inside /batch/drive/v3 so transfers never freeze or lose speed
    */
-  function createStreamingBatchCopier(accessToken, { batchSize = 4, concurrency = 40, onItemDone } = {}) {
-    const batchPool = createConcurrencyPool(concurrency);
+  function createStreamingBatchCopier(accessToken, { batchSize = 4, initial = 22, min = 8, max = 44, onItemDone } = {}) {
+    const batchPool = createAdaptivePool({ initial, min, max });
     const fallbackPool = createConcurrencyPool(20);
     let buffer = [];
     const inflight = [];
@@ -530,16 +586,17 @@ const DriveEngine = (() => {
         };
       });
 
-      // Acquire batchPool ONLY for the HTTP roundtrip so retries never self-deadlock the pool!
+      // Acquire adaptive batchPool ONLY for the HTTP roundtrip so retries never self-deadlock the pool!
       let batchRes = null;
       try {
-        batchRes = await batchPool(() => executeDriveBatch(reqs, accessToken));
+        batchRes = await batchPool(() => executeDriveBatch(reqs, accessToken), attempt > 0);
       } catch {
         batchRes = null;
       }
 
       const rateLimitRetry = [];
       const fallbackNeeded = [];
+      let sawThrottle = batchRes === null;
 
       chunk.forEach((t, idx) => {
         const r = batchRes && batchRes[idx];
@@ -556,21 +613,27 @@ const DriveEngine = (() => {
           (status === 403 &&
             /rateLimitExceeded|userRateLimitExceeded|sharingRateLimitExceeded|quotaExceeded|usageLimits|backendError/i.test(bodyTxt));
 
-        if (isTransient && attempt < 7) {
+        if (status === 403 || status === 429) sawThrottle = true;
+
+        if (isTransient && attempt < 8) {
           rateLimitRetry.push(t);
         } else {
           fallbackNeeded.push(t);
         }
       });
 
+      if (sawThrottle) batchPool.onThrottle();
+      else batchPool.onSuccess();
+
       const subPromises = [];
       if (rateLimitRetry.length) {
-        const waitMs = 300 * Math.pow(1.7, attempt) + Math.random() * 200;
-        await new Promise((resolve) => setTimeout(resolve, waitMs));
+        const waitMs = 160 * Math.pow(1.45, attempt) + Math.random() * 120;
         subPromises.push(
-          Promise.all(
-            chunkArray(rateLimitRetry, batchSize).map((subChunk) =>
-              runBatchWithRebatch(subChunk, attempt + 1)
+          new Promise((resolve) => setTimeout(resolve, waitMs)).then(() =>
+            Promise.all(
+              chunkArray(rateLimitRetry, batchSize).map((subChunk) =>
+                runBatchWithRebatch(subChunk, attempt + 1)
+              )
             )
           )
         );
@@ -617,7 +680,6 @@ const DriveEngine = (() => {
           dispatchChunk(buffer);
           buffer = [];
         }
-        // Snapshot length loop so any pushed tasks during waits are also awaited
         while (inflight.length) {
           const batch = inflight.splice(0, inflight.length);
           await Promise.all(batch);
@@ -628,7 +690,7 @@ const DriveEngine = (() => {
 
   async function liveBatchCopyFiles(tasks, accessToken, onItemDone) {
     if (!tasks.length) return;
-    const copier = createStreamingBatchCopier(accessToken, { batchSize: 4, concurrency: 40, onItemDone });
+    const copier = createStreamingBatchCopier(accessToken, { batchSize: 4, initial: 22, min: 8, max: 44, onItemDone });
     copier.push(tasks);
     await copier.flush();
   }
