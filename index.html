@@ -5,8 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta http-equiv="X-Content-Type-Options" content="nosniff" />
   <meta name="referrer" content="strict-origin-when-cross-origin" />
-  <title>NexusDrive by ByteNexus — Fast &amp; Secure Drive Transfer</title>
-  <meta name="description" content="NexusDrive by ByteNexus: Fast, zero-storage Google Drive-to-Drive file transfer, direct upload, and cloud manager." />
+  <meta name="theme-color" content="#facc15" />
+  <title>NexusDrive | Fast Google Drive Toolkit — Upload, Clone &amp; Manage</title>
+  <meta name="description" content="NexusDrive by ByteNexus — The fastest uploader, cloner, and manager for Google Drive. Nano-speed cloning and smart file injection." />
   <link rel="stylesheet" href="css/style.css" />
   <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
@@ -14,514 +15,806 @@
   <div id="toast-container" class="toast-container" aria-live="polite"></div>
 
   <!-- =========================================================================
-       VIEW 1: HOME / LANDING PAGE
+       VIEW 1: LANDING PAGE (PRO DARK SLATE + ELECTRIC GOLD THEME)
        ========================================================================= -->
   <div id="view-landing" class="view-section active">
-    <header class="navbar">
-      <div class="container nav-inner">
+    <header class="sticky-header">
+      <div class="container header-inner">
         <div class="brand" onclick="App.navigate('landing')">
-          <div class="brand-mark">N</div>
-          <div class="brand-text">
-            <span class="brand-name">NexusDrive</span>
-            <span class="brand-by">by ByteNexus</span>
+          <div class="brand-icon-box nitro-glow">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+          </div>
+          <div class="brand-meta">
+            <div class="brand-title-line">
+              <span class="brand-name">NexusDrive</span>
+              <span class="pro-badge">Pro-grade</span>
+            </div>
+            <p class="brand-tagline">Ultra fast uploader • clone • manage</p>
           </div>
         </div>
 
-        <nav class="nav-links">
-          <button type="button" class="nav-link active" onclick="App.navigate('landing')">Home</button>
-          <button type="button" class="nav-link" onclick="App.navigate('about')">About &amp; Privacy</button>
-          <button type="button" class="btn btn-ghost" onclick="App.openAuth('login')">Sign In</button>
-          <button type="button" class="btn btn-blue" onclick="App.openAuth('signup')">Get Started</button>
+        <nav class="header-nav">
+          <button type="button" class="btn-nav-link" onclick="App.navigate('about')">About &amp; Privacy</button>
+          <button type="button" class="btn btn-outline btn-sm" onclick="App.openAuth('login')">Login</button>
+          <button type="button" class="btn btn-hero btn-sm" onclick="App.openAuth('signup')">Get Started</button>
         </nav>
       </div>
     </header>
 
     <main>
-      <section class="hero container">
-        <div class="hero-badge">
-          <span class="dot-emerald"></span>
-          <span>ByteNexus Cloud Suite • Zero Data Storage</span>
-        </div>
+      <!-- Hero Section -->
+      <section class="hero-wrapper">
+        <div class="hero-glow-left"></div>
+        <div class="hero-glow-right"></div>
 
-        <h1 class="hero-heading">
-          Move Google Drive files<br />
-          <span>1000× faster, securely.</span>
-        </h1>
+        <div class="container hero-grid">
+          <div class="hero-left">
+            <div class="hero-pill">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" class="text-primary"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+              <span>Built for speed — <strong class="text-white">no limits</strong></span>
+              <span class="dot-sep"></span>
+              <span class="text-primary font-bold">1000× boost</span>
+            </div>
 
-        <p class="hero-sub">
-          NexusDrive transfers folders and files directly between Google Drives inside Google’s own cloud — without downloading to your device and without storing a single byte of your data.
-        </p>
+            <h1 class="hero-title">
+              Upload to Drive at <span class="text-gradient-hero">ridiculous speed</span>
+            </h1>
 
-        <div class="hero-buttons">
-          <button type="button" class="btn btn-blue btn-lg" onclick="App.openAuth('signup')">
-            <span>Start Free Transfer</span>
-            <span>→</span>
-          </button>
-          <button type="button" class="btn btn-outline btn-lg" onclick="App.navigate('about')">
-            <span>How We Protect Your Data</span>
-          </button>
-        </div>
+            <p class="hero-desc">
+              Clone folders, batch upload, and clean promotional junk automatically — a pro toolkit by <strong class="text-white">ByteNexus</strong> that feels instant.
+            </p>
 
-        <!-- Unique Visual Pipeline Diagram (Distinct from NitroDrive) -->
-        <div class="pipeline-diagram">
-          <div class="pipe-node">
-            <div class="pipe-icon">🔗</div>
-            <div class="pipe-title">1. Source Drive Link</div>
-            <div class="pipe-desc">Paste any shared folder or file URL</div>
+            <div class="hero-cta">
+              <button type="button" class="btn btn-hero btn-lg" onclick="App.openAuth('signup')">
+                <span>Start free</span>
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+              </button>
+              <button type="button" class="btn btn-outline btn-lg" onclick="App.navigate('about')">
+                <span>About &amp; Privacy</span>
+              </button>
+            </div>
+
+            <div class="hero-stats">
+              <div class="stat-card">
+                <div class="stat-ico">👥</div>
+                <div>
+                  <p class="stat-num">10K+</p>
+                  <p class="stat-lbl">Users</p>
+                </div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-ico">☁️</div>
+                <div>
+                  <p class="stat-num">5M+</p>
+                  <p class="stat-lbl">Uploads</p>
+                </div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-ico">🛡️</div>
+                <div>
+                  <p class="stat-num">99.9%</p>
+                  <p class="stat-lbl">Uptime</p>
+                </div>
+              </div>
+            </div>
           </div>
-          <div class="pipe-connector">── 1000× ──▶</div>
-          <div class="pipe-node highlight">
-            <div class="pipe-icon">⚡</div>
-            <div class="pipe-title">2. NexusDrive Engine</div>
-            <div class="pipe-desc">Direct cloud-to-cloud copy</div>
-          </div>
-          <div class="pipe-connector">── Secure ──▶</div>
-          <div class="pipe-node">
-            <div class="pipe-icon">☁️</div>
-            <div class="pipe-title">3. Your Google Drive</div>
-            <div class="pipe-desc">Saved straight into your Drive</div>
+
+          <!-- Right Live Queue Showcase Card -->
+          <div class="hero-right">
+            <div class="live-queue-card glass-card">
+              <div class="lq-header">
+                <div class="lq-title-row">
+                  <span class="dot-primary"></span>
+                  <span class="font-semibold">Live Queue</span>
+                </div>
+                <span class="pill-outline">1000×</span>
+              </div>
+              <p class="lq-sub">Batch uploads with smart retries and clean progress.</p>
+
+              <div class="lq-items">
+                <div class="lq-item">
+                  <div class="lq-item-info">
+                    <p class="lq-name">Product shots.zip</p>
+                    <p class="lq-size">1.2 GB</p>
+                  </div>
+                  <div class="lq-right">
+                    <span class="lq-tag">Lightning</span>
+                    <span class="text-primary">✓</span>
+                  </div>
+                </div>
+
+                <div class="lq-item">
+                  <div class="lq-item-info">
+                    <p class="lq-name">Client docs.pdf</p>
+                    <p class="lq-size">34 MB</p>
+                  </div>
+                  <div class="lq-right">
+                    <span class="lq-tag">Fast</span>
+                    <span class="text-primary">✓</span>
+                  </div>
+                </div>
+
+                <div class="lq-item">
+                  <div class="lq-item-info">
+                    <p class="lq-name">Footage_4k.mov</p>
+                    <p class="lq-size">6.8 GB</p>
+                  </div>
+                  <div class="lq-right">
+                    <span class="lq-tag">Stable</span>
+                    <span class="text-primary">✓</span>
+                  </div>
+                </div>
+
+                <div class="lq-speed-box">
+                  <div class="lq-speed-row">
+                    <span>Average speed</span>
+                    <span class="text-primary font-bold">~1000×</span>
+                  </div>
+                  <div class="progress-track">
+                    <div class="progress-fill-hero" style="width: 84%"></div>
+                  </div>
+                  <p class="lq-foot">Optimized pipeline for large files + folders.</p>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </section>
 
-      <!-- Clean 3-Card Trust Strip -->
-      <section class="features-strip container">
-        <div class="feature-tile">
-          <div class="ft-icon">🛡️</div>
-          <h3>Zero Data Storage</h3>
-          <p>We never copy, log, or store your files on ByteNexus servers. Everything stays strictly inside your Google Drive.</p>
+      <!-- Bento Feature Grid -->
+      <section class="container section-block">
+        <div class="section-intro">
+          <h2>A toolbox that feels premium</h2>
+          <p>Everything you need for pro uploads, without the clutter.</p>
         </div>
-        <div class="feature-tile">
-          <div class="ft-icon">⚡</div>
-          <h3>Instant Cloud Cloning</h3>
-          <p>Copy entire nested folders with original structure in seconds using Google’s internal server-to-server copy API.</p>
+
+        <div class="bento-grid">
+          <div class="bento-card span-3 glass-card">
+            <div class="bento-head">
+              <div class="bento-icon-hero">☁️</div>
+              <div>
+                <h3>Batch uploads</h3>
+                <p class="muted-sm">Queue + parallel processing.</p>
+              </div>
+            </div>
+            <p class="bento-body">Upload multiple files together with a clean progress experience.</p>
+          </div>
+
+          <div class="bento-card span-3 glass-card">
+            <div class="bento-head">
+              <div class="bento-icon-hero">📁</div>
+              <div>
+                <h3>Folder cloning</h3>
+                <p class="muted-sm">Copy public folders fast.</p>
+              </div>
+            </div>
+            <p class="bento-body">Pull complete structures including subfolders with minimal setup.</p>
+          </div>
+
+          <div class="bento-card span-2 glass-card">
+            <div class="bento-icon-sub">🔒</div>
+            <h3>Secure flow</h3>
+            <p class="bento-body">Your content stays tied to your Drive permissions. Zero storage.</p>
+          </div>
+
+          <div class="bento-card span-2 glass-card">
+            <div class="bento-icon-sub">🗑️</div>
+            <h3>Bulk delete</h3>
+            <p class="bento-body">Clean duplicates and unwanted files in one go.</p>
+          </div>
+
+          <div class="bento-card span-2 glass-card">
+            <div class="bento-icon-sub">⚡</div>
+            <h3>Smart Cleaner</h3>
+            <p class="bento-body">Auto-skip ads, promo links, and replace files effortlessly.</p>
+          </div>
         </div>
-        <div class="feature-tile">
-          <div class="ft-icon">✨</div>
-          <h3>Built for Simplicity</h3>
-          <p>No confusing settings. Sign in, connect your Google Drive, paste the link, and transfer cleanly in one click.</p>
+      </section>
+
+      <!-- Get Started in 60 Seconds -->
+      <section class="accent-band">
+        <div class="container">
+          <div class="band-head">
+            <div>
+              <h2>Get started in 60 seconds</h2>
+              <p>Simple flow. No confusion. Works beautifully on mobile too.</p>
+            </div>
+            <button type="button" class="btn btn-hero" onclick="App.openAuth('signup')">Create account</button>
+          </div>
+
+          <div class="steps-3-grid">
+            <div class="step-box glass-card">
+              <div class="step-box-top">
+                <div class="bento-icon-sub">👤</div>
+                <span class="pill-outline">01</span>
+              </div>
+              <h3>Sign up</h3>
+              <p>Create your account and enter dashboard.</p>
+            </div>
+
+            <div class="step-box glass-card">
+              <div class="step-box-top">
+                <div class="bento-icon-sub">🔑</div>
+                <span class="pill-outline">02</span>
+              </div>
+              <h3>Connect Drive</h3>
+              <p>One click to authorize your Google Drive safely.</p>
+            </div>
+
+            <div class="step-box glass-card">
+              <div class="step-box-top">
+                <div class="bento-icon-sub">⚡</div>
+                <span class="pill-outline">03</span>
+              </div>
+              <h3>Upload / Clone</h3>
+              <p>Batch upload files or clone folders like a pro.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Ready CTA -->
+      <section class="container section-block">
+        <div class="cta-banner glass-card">
+          <h2>Ready to move faster?</h2>
+          <p>Start free and level up your workflow with the fastest Drive uploader experience.</p>
+          <div class="cta-btns">
+            <button type="button" class="btn btn-hero btn-lg" onclick="App.openAuth('signup')">Get started free →</button>
+            <button type="button" class="btn btn-outline btn-lg" onclick="App.navigate('about')">Privacy &amp; About Us</button>
+          </div>
         </div>
       </section>
     </main>
 
-    <footer class="footer">
-      <div class="container footer-inner">
-        <span><strong>NexusDrive</strong> — A <strong style="color:#fff">ByteNexus</strong> Product</span>
-        <div class="footer-links">
-          <button type="button" class="footer-link" onclick="App.navigate('about')">About &amp; Privacy Policy</button>
-          <span class="status-pill"><span class="dot-emerald"></span> Operational</span>
+    <!-- Footer -->
+    <footer class="site-footer">
+      <div class="container footer-grid">
+        <div class="footer-brand-col">
+          <div class="brand">
+            <div class="brand-icon-box nitro-glow">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+            </div>
+            <span class="brand-name">NexusDrive</span>
+          </div>
+          <p class="footer-desc">
+            The fastest uploader toolkit for Google Drive by <strong>ByteNexus</strong>. Clone, manage, and batch upload with ridiculous speeds.
+          </p>
+        </div>
+
+        <div>
+          <h4>Product</h4>
+          <ul>
+            <li><button type="button" class="f-link" onclick="App.openAuth('login')">Dashboard</button></li>
+            <li><button type="button" class="f-link" onclick="window.scrollTo({top:0,behavior:'smooth'})">Features</button></li>
+          </ul>
+        </div>
+
+        <div>
+          <h4>Legal &amp; Info</h4>
+          <ul>
+            <li><button type="button" class="f-link" onclick="App.navigate('about')">About &amp; Privacy</button></li>
+            <li><button type="button" class="f-link" onclick="App.navigate('about')">Zero Data Promise</button></li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="container footer-bottom">
+        <p>© <span id="footer-year">2026</span> <strong>ByteNexus</strong> • NexusDrive. All rights reserved.</p>
+        <div class="footer-status">
+          <span class="dot-green"></span>
+          <span>System Operational</span>
+          <span class="pill-outline">v2.0</span>
         </div>
       </div>
     </footer>
   </div>
 
   <!-- =========================================================================
-       VIEW 2: ABOUT & ZERO-DATA PRIVACY PAGE
+       VIEW 2: ABOUT & PRIVACY PAGE
        ========================================================================= -->
   <div id="view-about" class="view-section">
-    <header class="navbar">
-      <div class="container nav-inner">
-        <div class="brand" onclick="App.navigate('landing')">
-          <div class="brand-mark">N</div>
-          <div class="brand-text">
+    <header class="sticky-header">
+      <div class="container header-inner">
+        <div class="brand" onclick="App.goHomeOrDashboard()">
+          <div class="brand-icon-box nitro-glow">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+          </div>
+          <div class="brand-meta">
             <span class="brand-name">NexusDrive</span>
-            <span class="brand-by">by ByteNexus</span>
+            <p class="brand-tagline">by ByteNexus</p>
           </div>
         </div>
 
-        <nav class="nav-links">
-          <button type="button" class="nav-link" onclick="App.goHomeOrDashboard()">← Back</button>
-          <button type="button" class="nav-link active">About &amp; Privacy</button>
-          <button type="button" class="btn btn-blue" onclick="App.openDashboardOrAuth()">Open Tool</button>
+        <nav class="header-nav">
+          <button type="button" class="btn btn-outline btn-sm" onclick="App.goHomeOrDashboard()">← Back</button>
+          <button type="button" class="btn btn-hero btn-sm" onclick="App.openDashboardOrAuth()">Open Tool</button>
         </nav>
       </div>
     </header>
 
-    <main class="container about-page">
+    <main class="container about-wrap">
       <div class="about-hero">
-        <span class="pill-blue">About ByteNexus &amp; NexusDrive</span>
+        <span class="pill-amber">About ByteNexus &amp; NexusDrive</span>
         <h1>Built for Speed. Engineered for Privacy.</h1>
         <p>
-          <strong>NexusDrive</strong> is developed by <strong>ByteNexus</strong> to solve one simple problem: moving large folders and files between Google Drive accounts without wasting internet data or hours of waiting.
+          <strong>NexusDrive</strong> is created by <strong>ByteNexus</strong> to make moving folders and files between Google Drive accounts effortless, ultra-fast, and completely private.
         </p>
       </div>
 
-      <!-- Zero Data Guarantee Banner -->
-      <div class="privacy-guarantee-card">
-        <div class="pg-icon">🔒</div>
+      <div class="privacy-banner glass-card">
+        <div class="pb-icon">🔒</div>
         <div>
-          <h2>Our 100% Zero-Data Storage Promise</h2>
+          <h2>100% Zero-Data Storage Promise</h2>
           <p>
-            <strong>NexusDrive does NOT store, read, or save any of your personal files or passwords.</strong> Everything stays completely private inside your own Google Drive, and transfers happen directly in the cloud with end-to-end encrypted connections.
+            <strong>NexusDrive does NOT store, read, or save any of your personal files or passwords.</strong> Your data remains strictly inside your own Google Drive, and transfers occur directly in the cloud over encrypted connections.
           </p>
         </div>
       </div>
 
-      <div class="about-grid">
-        <div class="about-card">
+      <div class="about-cards-grid">
+        <div class="about-card glass-card">
           <h3>1. Why Is NexusDrive So Fast?</h3>
-          <p>
-            Instead of downloading files to your device and uploading them again, NexusDrive moves files directly between cloud drives — saving your time and 100% of your internet data.
-          </p>
+          <p>Instead of downloading files to your device and re-uploading them, NexusDrive copies files directly inside the cloud — saving your time and 100% of your internet bandwidth.</p>
         </div>
-
-        <div class="about-card">
+        <div class="about-card glass-card">
           <h3>2. How Is Your Account Protected?</h3>
-          <p>
-            You sign in securely using official Google verification. Your credentials are never shared with us, and your session is automatically cleared whenever you log out or disconnect.
-          </p>
+          <p>You sign in securely using official Google verification. Your credentials are never shared with us, and your session is cleared whenever you log out or disconnect.</p>
         </div>
-
-        <div class="about-card">
+        <div class="about-card glass-card">
           <h3>3. What Data Do We Collect?</h3>
-          <p>
-            <strong>None.</strong> We do not keep copies of your files, we do not track your private folders, and we never sell or share user activity. You remain in full control at all times.
-          </p>
+          <p><strong>None.</strong> We do not keep copies of your files, we do not track your private folders, and we never sell or share user activity. You stay in complete control.</p>
         </div>
-
-        <div class="about-card">
+        <div class="about-card glass-card">
           <h3>4. About ByteNexus</h3>
-          <p>
-            <strong>ByteNexus</strong> builds clean, fast, and privacy-focused cloud tools designed to make everyday digital work simple and stress-free on both desktop and mobile.
-          </p>
+          <p><strong>ByteNexus</strong> builds lightweight, reliable, and privacy-focused cloud productivity tools designed to work smoothly on both desktop and mobile devices.</p>
         </div>
-      </div>
-
-      <div class="about-cta">
-        <button type="button" class="btn btn-blue btn-lg" onclick="App.openDashboardOrAuth()">Launch NexusDrive Now →</button>
       </div>
     </main>
-
-    <footer class="footer">
-      <div class="container footer-inner">
-        <span>© <span id="footer-year">2026</span> <strong>ByteNexus</strong> • NexusDrive</span>
-        <span>Zero Data Retention Architecture</span>
-      </div>
-    </footer>
   </div>
 
   <!-- =========================================================================
-       VIEW 3: SIMPLE AUTHENTICATION (SIGN IN / SIGN UP)
+       VIEW 3: SPLIT-SCREEN AUTH PAGE (LIKE NITRODRIVE)
        ========================================================================= -->
   <div id="view-auth" class="view-section">
-    <div class="auth-center-wrap">
-      <div class="auth-topbar">
-        <button type="button" class="btn btn-ghost" onclick="App.navigate('landing')">← Back to Home</button>
-        <button type="button" class="btn btn-ghost" onclick="App.navigate('about')">About &amp; Privacy</button>
-      </div>
-
-      <div class="auth-box">
-        <div class="brand center-brand">
-          <div class="brand-mark">N</div>
-          <div class="brand-text">
-            <span class="brand-name">NexusDrive</span>
-            <span class="brand-by">by ByteNexus</span>
-          </div>
-        </div>
-
-        <h2 id="auth-heading">Sign in to NexusDrive</h2>
-        <p id="auth-subtitle" class="auth-subtext">Access your Drive transfer workspace</p>
-
-        <form id="auth-form" class="form-vertical">
-          <div id="auth-name-group" class="field hidden">
-            <label for="auth-name">Full Name</label>
-            <input id="auth-name" type="text" placeholder="Enter your name" autocomplete="name" />
-          </div>
-
-          <div class="field">
-            <label for="auth-email">Email</label>
-            <input id="auth-email" type="email" placeholder="you@example.com" required autocomplete="email" />
-          </div>
-
-          <div class="field">
-            <label for="auth-password">Password</label>
-            <input id="auth-password" type="password" placeholder="••••••••" required autocomplete="current-password" />
-          </div>
-
-          <button type="submit" id="auth-submit-btn" class="btn btn-blue btn-full btn-lg">Sign In</button>
-        </form>
-
-        <div class="or-line"><span>or</span></div>
-
-        <button type="button" class="btn btn-outline btn-full" onclick="App.quickDemoAccountLogin()">
-          Continue with Demo Account
+    <div class="auth-split">
+      <div class="auth-left">
+        <button type="button" class="back-btn" onclick="App.navigate('landing')">
+          <span>←</span> Back to Home
         </button>
 
-        <p class="auth-footer-note">
-          <span id="auth-switch-prompt">New to NexusDrive?</span>
-          <button type="button" id="auth-switch-btn" class="text-link" onclick="App.toggleAuthMode()">Create account</button>
-        </p>
+        <div class="auth-center">
+          <div class="auth-container">
+            <div class="brand mb-24">
+              <div class="brand-icon-box nitro-glow">
+                <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+              </div>
+              <div>
+                <h1 class="brand-name-lg">NexusDrive</h1>
+                <p class="brand-sub-upper">Ultra Fast Uploader • ByteNexus</p>
+              </div>
+            </div>
+
+            <div class="mb-20">
+              <h2 id="auth-heading" class="auth-title">Welcome back</h2>
+              <p id="auth-subtitle" class="auth-sub">Sign in to continue to NexusDrive</p>
+            </div>
+
+            <!-- Continue with Google -->
+            <button type="button" class="btn btn-outline btn-full mb-20" onclick="App.quickDemoAccountLogin()">
+              <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="currentColor" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="currentColor" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="currentColor" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+              <span>Continue with Google</span>
+            </button>
+
+            <div class="or-sep"><span>or</span></div>
+
+            <form id="auth-form" class="form-stack">
+              <div id="auth-name-group" class="field hidden">
+                <label for="auth-name">Full Name</label>
+                <input id="auth-name" type="text" placeholder="Muhammad Wasif" autocomplete="name" />
+              </div>
+
+              <div class="field">
+                <label for="auth-email">Email</label>
+                <input id="auth-email" type="email" placeholder="you@example.com" required autocomplete="email" />
+              </div>
+
+              <div class="field">
+                <label for="auth-password">Password</label>
+                <div class="pass-wrap">
+                  <input id="auth-password" type="password" placeholder="••••••••" required autocomplete="current-password" />
+                  <button type="button" class="pass-eye" onclick="App.togglePasswordVisibility()" title="Show/Hide Password">👁️</button>
+                </div>
+              </div>
+
+              <button type="submit" id="auth-submit-btn" class="btn btn-hero btn-full btn-lg">Sign In</button>
+            </form>
+
+            <p class="auth-switch">
+              <span id="auth-switch-prompt">Don't have an account?</span>
+              <button type="button" id="auth-switch-btn" class="text-primary-link" onclick="App.toggleAuthMode()">Sign up</button>
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div class="auth-right">
+        <div class="auth-right-inner">
+          <div class="brand-icon-xl nitro-glow">
+            <svg viewBox="0 0 24 24" width="38" height="38" fill="currentColor"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+          </div>
+          <h2>Upload at <span class="text-primary">Light Speed</span></h2>
+          <p>Join thousands of users who trust NexusDrive by ByteNexus for their fastest uploads ever.</p>
+          <div class="auth-stats-3">
+            <div>
+              <p class="as-num text-primary">10K+</p>
+              <p class="as-lbl">Users</p>
+            </div>
+            <div>
+              <p class="as-num text-cyan">5M+</p>
+              <p class="as-lbl">Files</p>
+            </div>
+            <div>
+              <p class="as-num text-cyan">99.9%</p>
+              <p class="as-lbl">Uptime</p>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   </div>
 
   <!-- =========================================================================
-       VIEW 4: CLEAN, TO-THE-POINT USER DASHBOARD
+       VIEW 4: PRO DASHBOARD (EXACT NITRODRIVE FLOW & CLEAN PRO UI)
        ========================================================================= -->
   <div id="view-dashboard" class="view-section">
-    <!-- Top Header -->
-    <header class="navbar">
-      <div class="container nav-inner">
+    <!-- Sticky Top Control Panel Navbar -->
+    <nav class="dash-navbar">
+      <div class="container dash-nav-inner">
         <div class="brand" onclick="App.switchTab('clone')">
-          <div class="brand-mark">N</div>
-          <div class="brand-text">
+          <div class="brand-icon-box nitro-glow">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+          </div>
+          <div class="brand-meta">
             <span class="brand-name">NexusDrive</span>
-            <span class="brand-by">by ByteNexus</span>
+            <p class="control-sub">Control Panel</p>
           </div>
         </div>
 
-        <div class="dash-nav-pills">
-          <button type="button" class="pill-tab active" data-tab="clone" onclick="App.switchTab('clone')">Clone Link</button>
-          <button type="button" class="pill-tab" data-tab="upload" onclick="App.switchTab('upload')">Upload Files</button>
-          <button type="button" class="pill-tab" data-tab="manage" onclick="App.switchTab('manage')">My Drive Files</button>
-          <button type="button" class="pill-tab" onclick="App.navigate('about')">About &amp; Privacy</button>
-        </div>
-
-        <div class="dash-user-actions">
-          <span id="dash-user-name" class="user-chip">User</span>
-          <button type="button" class="btn btn-ghost btn-sm" onclick="App.logout()">Logout</button>
+        <div class="dash-top-actions">
+          <button type="button" class="btn btn-outline btn-sm" onclick="App.navigate('about')">
+            <span class="hide-xs">About &amp; Privacy</span>
+            <span class="show-xs">About</span>
+          </button>
+          <button type="button" class="btn btn-outline btn-sm" onclick="App.navigate('landing')">
+            <span>🏠</span>
+            <span class="hide-xs">Home</span>
+          </button>
+          <button type="button" class="btn btn-outline btn-sm" onclick="App.logout()">
+            <span>🚪</span>
+            <span class="hide-xs">Logout</span>
+          </button>
         </div>
       </div>
-    </header>
+    </nav>
 
-    <!-- Main Centered Workspace -->
-    <main class="container dash-main">
-      <!-- Destination Google Drive Connection Bar -->
-      <div class="connection-strip">
-        <div class="conn-left">
-          <div id="conn-status-dot" class="conn-dot offline"></div>
-          <div>
-            <div class="conn-title">
-              Destination Google Drive: <strong id="conn-email-label">Not Connected</strong>
-            </div>
-            <div id="conn-sub-label" class="conn-sub">
-              Connect the Google Drive account where you want files saved.
-            </div>
-          </div>
+    <main class="container dash-body">
+      <!-- Greeting Header -->
+      <header class="dash-greeting">
+        <h2>Welcome, <span id="dash-user-name">User</span>!</h2>
+        <div class="greeting-badges">
+          <span class="pill-hero nitro-glow">⚡ NexusDrive - 1000x Speed</span>
+          <span class="pill-outline">🔒 Zero-Data Storage</span>
         </div>
+      </header>
 
-        <div class="conn-right">
-          <div id="quota-pill" class="quota-pill hidden">
+      <!-- Workspace Tools + Connect Google Drive Row -->
+      <div class="workspace-header-row">
+        <h3>Workspace Tools</h3>
+
+        <div class="conn-btn-group">
+          <div id="quota-pill" class="pill-outline hidden">
             <span id="quota-text">0 GB / 15 GB</span>
           </div>
           <button type="button" id="btn-demo-drive" class="btn btn-outline btn-sm" onclick="App.connectSandboxDrive()">
             Demo Drive
           </button>
-          <button type="button" id="btn-connect-drive" class="btn btn-blue" onclick="App.openConnectModal()">
-            Connect Google Drive
+          <button type="button" id="btn-connect-drive" class="btn btn-hero btn-sm" onclick="App.openConnectModal()">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+            <span>Connect Google Drive</span>
           </button>
-          <button type="button" id="btn-disconnect-drive" class="btn btn-outline btn-sm hidden" onclick="App.disconnectDrive()">
-            Disconnect
+          <button type="button" id="btn-disconnect-drive" class="btn btn-connected btn-sm hidden" onclick="App.disconnectDrive()">
+            <span>✓</span>
+            <span id="conn-email-label">Drive Connected (Disconnect)</span>
           </button>
         </div>
       </div>
 
-      <!-- Mobile Tab Bar -->
-      <div class="mobile-pill-bar">
-        <button type="button" class="m-pill active" data-tab="clone" onclick="App.switchTab('clone')">Clone Link</button>
-        <button type="button" class="m-pill" data-tab="upload" onclick="App.switchTab('upload')">Upload</button>
-        <button type="button" class="m-pill" data-tab="manage" onclick="App.switchTab('manage')">My Files</button>
-      </div>
+      <!-- Main 3-Tab Glass Card Container -->
+      <div class="workspace-shell glass-card">
+        <div class="tabs-bar">
+          <button type="button" class="tab-btn active" data-tab="clone" onclick="App.switchTab('clone')">
+            <span>🔄</span> <span>Clone</span>
+          </button>
+          <button type="button" class="tab-btn" data-tab="upload" onclick="App.switchTab('upload')">
+            <span>☁️</span> <span>Upload</span>
+          </button>
+          <button type="button" class="tab-btn" data-tab="manage" onclick="App.switchTab('manage')">
+            <span>📁</span> <span>Manage</span>
+          </button>
+        </div>
 
-      <!-- =====================================================================
-           TAB 1: CLONE LINK (TO THE POINT)
-           ===================================================================== -->
-      <section id="tab-clone" class="dash-panel active">
-        <div class="focus-card">
-          <div class="focus-head">
-            <div>
-              <h2>Clone Google Drive Folder or File</h2>
-              <p>Paste a shared Google Drive link below to copy everything directly into your connected Drive.</p>
-            </div>
-            <button type="button" class="btn btn-ghost btn-sm" onclick="App.fillSampleLink()">Try Sample Link</button>
-          </div>
+        <!-- ===================================================================
+             TAB 1: SMART CLONE (2-COLUMN PRO LAYOUT)
+             =================================================================== -->
+        <section id="tab-clone" class="tab-content active">
+          <div class="two-col-grid">
+            <!-- Left: Smart Clone Controls -->
+            <div class="sub-card glass-card">
+              <div class="card-top-row">
+                <div class="card-icon-primary">
+                  <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+                </div>
+                <div class="flex-1">
+                  <h3>Nexus Smart Clone</h3>
+                  <p>Automatic folder naming &amp; smart promo filtering.</p>
+                </div>
+                <button type="button" class="btn btn-outline btn-xs" onclick="App.fillSampleLink()">Sample</button>
+              </div>
 
-          <!-- Source Link Input -->
-          <div class="source-input-block">
-            <label for="clone-source-link">Source Google Drive Link</label>
-            <div class="input-with-btn">
-              <input id="clone-source-link" type="text" placeholder="https://drive.google.com/drive/folders/..." />
-              <button type="button" id="btn-scan-link" class="btn btn-outline" onclick="App.scanSourceLink()">
-                <span id="scan-btn-text">Scan Files</span>
+              <div class="hr-line"></div>
+
+              <!-- Link Input + Scan -->
+              <div class="field">
+                <label for="clone-source-link">Google Drive Link</label>
+                <div class="input-action-row">
+                  <input id="clone-source-link" type="text" placeholder="Paste link here..." />
+                  <button type="button" id="btn-scan-link" class="btn btn-outline" onclick="App.scanSourceLink()">
+                    <span>🔍</span>
+                    <span id="scan-btn-text">Scan</span>
+                  </button>
+                </div>
+              </div>
+
+              <!-- Smart Cleaner & Exact File Auto-Replace -->
+              <div class="cleaner-box">
+                <div class="cleaner-title">
+                  <span class="text-emerald">🛡️</span>
+                  <span>NEXUS CLEANER (AUTO-FILTER)</span>
+                </div>
+                <input id="filter-keywords" type="text" value="promo, link, ads" placeholder="promo, ads, links, txt" class="input-sm" />
+                <p class="hint-xs">NexusDrive will auto-skip any file/folder containing these words.</p>
+
+                <div class="hr-line-light"></div>
+
+                <div class="cleaner-title">
+                  <span class="text-orange">▽</span>
+                  <span>EXACT FILE NAMES (AUTO-REPLACE)</span>
+                </div>
+                <input id="filter-exact-replace" type="text" placeholder="500$ bonus.pdf, More Courses.pdf" class="input-sm" />
+                <p class="hint-xs">Enter full file names — these files will be deselected and replaced by your injected files.</p>
+              </div>
+
+              <!-- Optional Custom Folder Name -->
+              <div class="field">
+                <label for="clone-dest-name">Custom Folder Name (Optional)</label>
+                <input id="clone-dest-name" type="text" placeholder="Leave blank to keep original folder name" class="input-sm" />
+              </div>
+
+              <!-- Selected Content Tree + Injection Queue -->
+              <div id="tree-section" class="tree-wrap hidden">
+                <div class="tree-box">
+                  <div class="tree-head">
+                    <span id="tree-summary-badge">Selected Content</span>
+                    <div class="tree-btns">
+                      <button type="button" class="btn btn-outline btn-xs" onclick="App.selectAllTree(true)">All</button>
+                      <button type="button" class="btn btn-outline btn-xs" onclick="App.selectAllTree(false)">None</button>
+                    </div>
+                  </div>
+                  <div id="tree-container" class="tree-scroll custom-scrollbar"></div>
+                </div>
+
+                <!-- Injection Queue -->
+                <div class="inject-queue-box">
+                  <div class="iq-head">
+                    <span class="iq-title">📦 INJECTION QUEUE</span>
+                    <button type="button" class="btn btn-outline btn-xs" onclick="document.getElementById('inject-file-input').click()">+ Add Files</button>
+                  </div>
+                  <input type="file" id="inject-file-input" multiple hidden onchange="App.addInjectFiles(this.files)" />
+                  <div id="inject-file-tags" class="tag-wrap"></div>
+                </div>
+              </div>
+
+              <!-- Primary Action Button -->
+              <button type="button" id="btn-start-clone" class="btn btn-hero btn-xl btn-full" onclick="App.startCloneTransfer()">
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+                <span>Start Nexus Transfer</span>
               </button>
-            </div>
-          </div>
 
-          <!-- Simple 2-item Options Row -->
-          <div class="simple-options-row">
-            <label class="checkbox-label">
-              <input id="opt-auto-clean" type="checkbox" checked />
-              <span>Automatically skip ads &amp; promo files</span>
-            </label>
-            <div class="inline-field">
-              <input id="clone-dest-name" type="text" placeholder="Custom folder name (optional)" />
-            </div>
-          </div>
-
-          <!-- Scanned File Tree (Appears only after clicking Scan) -->
-          <div id="tree-section" class="tree-box hidden">
-            <div class="tree-box-head">
-              <span id="tree-summary-badge">0 files selected</span>
-              <div class="tree-btns">
-                <button type="button" class="btn btn-ghost btn-xs" onclick="App.selectAllTree(true)">Select All</button>
-                <button type="button" class="btn btn-ghost btn-xs" onclick="App.selectAllTree(false)">Uncheck All</button>
+              <!-- Progress Under Button -->
+              <div id="clone-status-box" class="hidden clone-progress-wrap">
+                <div class="progress-label-row">
+                  <span id="clone-progress-msg">Initializing...</span>
+                  <span id="clone-progress-pct">0%</span>
+                </div>
+                <div class="progress-track">
+                  <div id="clone-progress-bar" class="progress-fill-hero" style="width: 0%"></div>
+                </div>
+                <div id="clone-error-log" class="error-box hidden"></div>
               </div>
             </div>
-            <div id="tree-container" class="tree-scroll custom-scrollbar"></div>
-          </div>
 
-          <!-- Primary Action Button -->
-          <button type="button" id="btn-start-clone" class="btn btn-blue btn-full btn-xl" onclick="App.startCloneTransfer()">
-            Transfer to My Google Drive
-          </button>
-
-          <!-- Clean Inline Transfer Status & Progress (Appears during/after transfer) -->
-          <div id="clone-status-box" class="status-box hidden">
-            <div class="status-top">
-              <span id="clone-progress-msg">Preparing transfer...</span>
-              <strong id="clone-progress-pct">0%</strong>
-            </div>
-            <div class="bar-track">
-              <div id="clone-progress-bar" class="bar-fill" style="width: 0%"></div>
-            </div>
-            <div id="clone-done-row" class="done-row hidden">
-              <span class="done-msg">✓ Transfer completed safely into your Drive!</span>
-              <button type="button" class="btn btn-emerald btn-sm" onclick="App.switchTab('manage')">View Files in My Drive →</button>
-            </div>
-            <div id="clone-error-log" class="err-box hidden"></div>
-          </div>
-        </div>
-      </section>
-
-      <!-- =====================================================================
-           TAB 2: UPLOAD FILES (SIMPLE & DIRECT)
-           ===================================================================== -->
-      <section id="tab-upload" class="dash-panel">
-        <div class="focus-card">
-          <div class="focus-head">
-            <div>
-              <h2>Upload Files to Google Drive</h2>
-              <p>Select or drop files from your device to upload directly into your connected Drive.</p>
-            </div>
-            <button type="button" class="btn btn-ghost btn-sm" onclick="App.clearUploadQueue()">Clear List</button>
-          </div>
-
-          <div id="upload-dropzone" class="drop-area" onclick="document.getElementById('batch-upload-input').click()">
-            <div class="drop-icon">☁️</div>
-            <h3>Drop files here, or click to select</h3>
-            <p>Supports single or multiple files with live progress tracking</p>
-            <input type="file" id="batch-upload-input" multiple hidden onchange="App.handleBatchUpload(this.files)" />
-          </div>
-
-          <div id="upload-progress-wrap" class="hidden upload-summary">
-            <div class="status-top">
-              <span>Overall Upload Progress</span>
-              <strong id="upload-count-text">0/0</strong>
-            </div>
-            <div class="bar-track">
-              <div id="upload-progress-bar" class="bar-fill" style="width: 0%"></div>
-            </div>
-          </div>
-
-          <div id="upload-queue-list" class="simple-list custom-scrollbar"></div>
-        </div>
-      </section>
-
-      <!-- =====================================================================
-           TAB 3: MY DRIVE FILES (EXPLORER + PREVIEW)
-           ===================================================================== -->
-      <section id="tab-manage" class="dash-panel">
-        <div class="manager-split">
-          <!-- File List -->
-          <div class="focus-card manager-pane">
-            <div class="focus-head">
-              <div>
-                <h2>My Drive Files</h2>
-                <p>Browse folders, preview files, or remove items.</p>
+            <!-- Right: Nexus Control Live Radar Card -->
+            <div class="sub-card glass-card control-center-card">
+              <div id="radar-idle-view" class="radar-state">
+                <div class="radar-circle-idle">
+                  <svg viewBox="0 0 24 24" width="44" height="44" fill="currentColor"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+                </div>
+                <h4>Nexus Control</h4>
+                <p id="radar-idle-desc">Ready to launch. Click Start Transfer or Scan to customize content.</p>
               </div>
-              <div class="row-gap">
-                <button type="button" class="btn btn-outline btn-sm" onclick="App.refreshManager()">↻ Refresh</button>
+
+              <div id="radar-running-view" class="radar-state hidden">
+                <div class="spinner-ring-wrap">
+                  <div class="spinner-ring-bg"></div>
+                  <div class="spinner-ring-spin"></div>
+                  <div class="spinner-center-ico">⚡</div>
+                </div>
+                <span id="radar-stage-pill" class="stage-pill">PROCESSING STAGE: COPYING</span>
+                <h4>Transferring Data</h4>
+                <p>Original folder names and smart filters are active.</p>
+              </div>
+
+              <div id="radar-done-view" class="radar-state hidden">
+                <div class="radar-circle-done">✓</div>
+                <h4>Transfer Complete! 🚀</h4>
+                <p id="radar-done-desc">Your files have been cloned directly into your Google Drive.</p>
+                <button type="button" class="btn btn-hero" onclick="App.switchTab('manage')">View in Drive Manager →</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ===================================================================
+             TAB 2: UPLOAD (2-COLUMN PRO LAYOUT)
+             =================================================================== -->
+        <section id="tab-upload" class="tab-content">
+          <div class="two-col-grid">
+            <!-- Left: Dropzone -->
+            <div class="sub-card glass-card">
+              <div class="card-top-row">
+                <div class="card-icon-primary">☁️</div>
+                <div class="flex-1">
+                  <h3>Upload Files</h3>
+                  <p>Upload files directly to your Google Drive</p>
+                </div>
+                <span id="upload-conn-pill" class="pill-outline">Connect Drive first</span>
+              </div>
+
+              <div id="upload-dropzone" class="upload-drop-area" onclick="document.getElementById('batch-upload-input').click()">
+                <div class="drop-circle">☁️</div>
+                <h4>Drop files here</h4>
+                <p>or click to browse from your computer</p>
+                <input type="file" id="batch-upload-input" multiple hidden onchange="App.handleBatchUpload(this.files)" />
+              </div>
+
+              <div id="upload-progress-wrap" class="hidden upload-prog-box">
+                <div class="progress-label-row">
+                  <span>Progress</span>
+                  <span id="upload-count-text">0/0</span>
+                </div>
+                <div class="progress-track">
+                  <div id="upload-progress-bar" class="progress-fill-hero" style="width: 0%"></div>
+                </div>
+                <div id="upload-queue-list" class="upload-items-list custom-scrollbar"></div>
+                <button type="button" class="btn btn-outline btn-sm" onclick="App.clearUploadQueue()">Clear</button>
+              </div>
+            </div>
+
+            <!-- Right: Results -->
+            <div class="sub-card glass-card control-center-card">
+              <div class="radar-state">
+                <div class="radar-circle-idle" id="upload-result-ico">✓</div>
+                <h4 id="upload-result-title">Ready to go!</h4>
+                <p id="upload-result-desc">Upload files to see results here.</p>
+                <button type="button" id="btn-upload-view-mgr" class="btn btn-hero hidden" onclick="App.switchTab('manage')">View Files in Manage →</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ===================================================================
+             TAB 3: MANAGE (2-COLUMN PRO LAYOUT + PREVIEW PLAYER)
+             =================================================================== -->
+        <section id="tab-manage" class="tab-content">
+          <div class="two-col-grid">
+            <!-- Left: File Explorer -->
+            <div class="sub-card glass-card manager-col">
+              <div class="card-top-row">
+                <div class="card-icon-primary">📁</div>
+                <div class="flex-1">
+                  <h3>Manage Drive Files</h3>
+                  <p>Navigate, preview, and organize your drive.</p>
+                </div>
+              </div>
+
+              <div class="mgr-actions-row">
+                <button type="button" class="btn btn-outline btn-sm" onclick="App.refreshManager()">↻ Scan Current Folder</button>
                 <button type="button" id="btn-delete-selected" class="btn btn-danger btn-sm" disabled onclick="App.deleteSelectedManaged()">Delete (<span id="manage-selected-count">0</span>)</button>
               </div>
-            </div>
 
-            <div class="manager-controls">
-              <input id="manage-search-input" type="text" placeholder="Search files..." onkeydown="if(event.key==='Enter') App.refreshManager()" />
-              <div class="row-gap">
-                <input id="manage-new-folder-input" type="text" placeholder="New folder name..." />
-                <button type="button" class="btn btn-blue btn-sm" onclick="App.createManagerFolder()">+ Create</button>
+              <div class="mgr-tools-row">
+                <input id="manage-search-input" type="text" placeholder="Search files..." class="input-sm" onkeydown="if(event.key==='Enter') App.refreshManager()" />
+                <div class="mgr-folder-add">
+                  <input id="manage-new-folder-input" type="text" placeholder="New folder..." class="input-sm" />
+                  <button type="button" class="btn btn-hero btn-xs" onclick="App.createManagerFolder()">+ Folder</button>
+                </div>
+              </div>
+
+              <div class="crumb-strip">
+                <button type="button" id="btn-manage-back" class="btn btn-outline btn-xs hidden" onclick="App.manageGoBack()">←</button>
+                <span>📁</span>
+                <span id="manage-current-folder-name" class="crumb-title">My Drive</span>
+              </div>
+
+              <div id="manage-file-list" class="mgr-list custom-scrollbar">
+                <div class="empty-msg">No items here. Click "Scan Current Folder".</div>
               </div>
             </div>
 
-            <div class="crumb-bar">
-              <button type="button" id="btn-manage-back" class="btn btn-ghost btn-xs hidden" onclick="App.manageGoBack()">← Back</button>
-              <span>📁</span>
-              <strong id="manage-current-folder-name">My Drive</strong>
-            </div>
-
-            <div id="manage-file-list" class="file-scroll custom-scrollbar">
-              <div class="empty-msg">Connect your Google Drive to view your files.</div>
-            </div>
-          </div>
-
-          <!-- Preview Pane -->
-          <div class="focus-card manager-pane">
-            <div class="focus-head">
-              <div>
-                <h2>File Preview</h2>
-                <p>View documents, images, or stream videos.</p>
+            <!-- Right: Live Preview Area -->
+            <div class="sub-card glass-card manager-col">
+              <div class="mgr-preview-head">
+                <h4>Preview Area</h4>
+                <button type="button" id="btn-close-preview" class="btn btn-outline btn-xs hidden" onclick="App.closePreview()">Close Preview</button>
               </div>
-              <button type="button" id="btn-close-preview" class="btn btn-ghost btn-xs hidden" onclick="App.closePreview()">Close</button>
-            </div>
-            <div id="manage-preview-area" class="preview-pane">
-              <div class="empty-msg">Click any file on the left to preview it here.</div>
+              <div id="manage-preview-area" class="mgr-preview-box">
+                <div class="empty-preview">
+                  <div class="preview-eye">👁️</div>
+                  <h4>Preview Area</h4>
+                  <p>Click a file to see its preview and play videos here.</p>
+                </div>
+              </div>
             </div>
           </div>
-        </div>
-      </section>
+        </section>
+      </div>
     </main>
   </div>
 
   <!-- =========================================================================
-       MODAL: CONNECT GOOGLE DRIVE
+       MODAL: CONNECT GOOGLE DRIVE (FALLBACK / DEMO / ADVANCED TOKEN)
        ========================================================================= -->
   <div id="connect-modal" class="modal-overlay hidden">
-    <div class="modal-box">
-      <div class="modal-top">
+    <div class="modal-box glass-card">
+      <div class="modal-head">
         <div>
           <h3>Connect Google Drive</h3>
-          <p>Choose your destination Google Drive account</p>
+          <p>Select how you want to connect your Drive</p>
         </div>
-        <button type="button" class="btn btn-ghost btn-sm" onclick="App.closeConnectModal()">✕</button>
+        <button type="button" class="btn btn-outline btn-xs" onclick="App.closeConnectModal()">✕</button>
       </div>
-
-      <div class="modal-content">
+      <div class="modal-body">
         <div id="modal-error-box" class="modal-err hidden"></div>
 
-        <!-- Primary Option: Instant Test Drive -->
-        <div class="connect-option primary">
+        <div class="modal-opt primary">
           <div>
             <h4>Sandbox Test Drive (Instant Mode)</h4>
-            <p>Try NexusDrive immediately — test scanning, real file uploads, cloning, and previews without any setup.</p>
+            <p>Test scanning, real file uploads, cloning, and video/text previews immediately.</p>
           </div>
-          <button type="button" id="btn-modal-sandbox" class="btn btn-blue" onclick="App.connectSandboxDrive()">Connect Sandbox Drive</button>
+          <button type="button" id="btn-modal-sandbox" class="btn btn-hero btn-sm" onclick="App.connectSandboxDrive()">Connect Demo</button>
         </div>
 
-        <!-- Real Google Drive Option -->
-        <div class="connect-option">
-          <div style="width:100%">
-            <h4>Real Google Drive Account (OAuth 2.0)</h4>
-            <p>Connect your personal Gmail Google Drive safely. We never store your files or password.</p>
-            <div class="owner-toggle">
-              <button type="button" class="text-link" onclick="App.toggleOwnerConfig()">Configure Site Google Client ID / Token ▾</button>
-            </div>
-            <div id="owner-config-panel" class="owner-panel hidden">
-              <input id="oauth-client-id" type="text" placeholder="Google OAuth Client ID (or set in js/config.js)" />
+        <div class="modal-opt">
+          <div class="w-full">
+            <h4>Real Google Drive (OAuth 2.0 / Token)</h4>
+            <p>Connect your personal Gmail Google Drive safely.</p>
+            <div class="modal-stack">
+              <input id="oauth-client-id" type="text" placeholder="Google OAuth Client ID" class="input-sm" />
               <button type="button" class="btn btn-outline btn-full btn-sm" onclick="App.connectWithGoogleOAuth()">Authorize with Google OAuth</button>
-              <div class="or-line"><span>or paste access token</span></div>
-              <div class="input-with-btn">
-                <input id="manual-access-token" type="password" placeholder="Paste ya29... token" />
-                <button type="button" class="btn btn-emerald btn-sm" onclick="App.connectWithManualToken()">Connect</button>
+              <div class="or-sep"><span>or paste token</span></div>
+              <div class="input-action-row">
+                <input id="manual-access-token" type="password" placeholder="Paste ya29... token" class="input-sm" />
+                <button type="button" class="btn btn-hero btn-sm" onclick="App.connectWithManualToken()">Connect</button>
               </div>
             </div>
           </div>
